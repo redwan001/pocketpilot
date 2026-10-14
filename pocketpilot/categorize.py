@@ -4,6 +4,22 @@ from __future__ import annotations
 import re
 
 RULES = [
+    # International merchants (card statements) - specific names first so they beat generic words below
+    ("uber *eats", "food_delivery"), ("uber eats", "food_delivery"), ("doordash", "food_delivery"),
+    ("grubhub", "food_delivery"), ("deliveroo", "food_delivery"), ("lyft", "transport"),
+    ("dollar general", "groceries"), ("dollar tree", "groceries"), ("family dollar", "groceries"),
+    ("walmart", "groceries"), ("kroger", "groceries"), ("sprouts", "groceries"), ("fresh market", "groceries"),
+    ("aldi", "groceries"), ("publix", "groceries"), ("whole foods", "groceries"), ("trader joe", "groceries"),
+    ("costco", "groceries"), ("target", "shopping"), ("supermarket", "groceries"), ("grocery", "groceries"),
+    ("hypermart", "groceries"), ("walgreens", "health"), ("cvs", "health"), ("clin", "health"), ("hlth", "health"),
+    ("medical", "health"), ("pharmacy", "health"), ("temu", "shopping"), ("shein", "shopping"), ("ebay", "shopping"),
+    ("best buy", "electronics"), ("apple.com/bill", "subscriptions"), ("hulu", "subscriptions"),
+    ("disney", "subscriptions"), ("prime video", "subscriptions"), ("starbucks", "dining_out"),
+    ("mcdonald", "dining_out"), ("chipotle", "dining_out"), ("dim sum", "dining_out"), ("grill", "dining_out"),
+    ("kitchen", "dining_out"), ("bbq", "dining_out"), ("restaurant depot", "groceries"), ("mlgw", "utilities"),
+    ("comcast", "internet_mobile"), ("xfinity", "internet_mobile"), ("verizon", "internet_mobile"),
+    ("t-mobile", "internet_mobile"), ("at&t", "internet_mobile"), ("shell oil", "transport"), ("exxon", "transport"),
+    ("amazon prime", "subscriptions"), ("amazon", "shopping"), ("amzn", "shopping"),
     ("payroll", "income"), ("salary", "income"), ("bkash received", "income"), ("interest", "income"),
     ("remittance", "income"), ("refund", "income"), ("cash deposit", "income"), ("cash in", "income"),
     ("atm", "cash"), ("cash withdrawal", "cash"), ("cash wdl", "cash"), ("cash out", "cash"),

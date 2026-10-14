@@ -144,7 +144,7 @@ class Toolbox:
 
         # READ ---------------------------------------------------------------
         def get_balances():
-            return {"currency": "BDT", "checking": s.balances["checking"], "savings": s.balances["savings"],
+            return {"currency": s.currency, "account_type": s.account_type, "checking": s.balances["checking"], "savings": s.balances["savings"],
                     "as_of": today.isoformat()}
 
         def list_transactions(days: int = 30, category: str | None = None, merchant: str | None = None,
@@ -205,7 +205,7 @@ class Toolbox:
 
         # ACT ----------------------------------------------------------------
         def pf_budget(category: str, monthly_limit: float):
-            return f"Set a monthly budget of BDT {monthly_limit:,.0f} for {LABELS.get(category, category)}."
+            return f"Set a monthly budget of {an.money(monthly_limit)} for {LABELS.get(category, category)}."
 
         def set_category_budget(category: str, monthly_limit: float):
             s.budgets[category] = monthly_limit
@@ -213,7 +213,7 @@ class Toolbox:
 
         def pf_savings(amount: float):
             self.policy.check_outgoing(s, amount, today.isoformat())
-            return f"Move BDT {amount:,.0f} from checking to savings."
+            return f"Move {an.money(amount)} from checking to savings."
 
         def move_to_savings(amount: float):
             s.balances["checking"] = round(s.balances["checking"] - amount, 2)
@@ -226,7 +226,7 @@ class Toolbox:
             r = self._sub_lookup(merchant)
             if r["merchant"] in s.cancelled_subscriptions:
                 raise PolicyViolation(f"{r['merchant']} is already cancelled.")
-            return f"Cancel the {r['merchant']} subscription (saves BDT {r['monthly_cost']:,.0f}/month)."
+            return f"Cancel the {r['merchant']} subscription (saves {an.money(r['monthly_cost'])}/month)."
 
         def cancel_subscription(merchant: str):
             r = self._sub_lookup(merchant)
@@ -239,7 +239,7 @@ class Toolbox:
             if p is None or p.kind != "biller":
                 raise PolicyViolation(f"'{biller}' is not a saved biller.")
             self.policy.check_outgoing(s, amount, today.isoformat(), biller)
-            return f"Pay BDT {amount:,.0f} to {p.name} ({p.account_ref})."
+            return f"Pay {an.money(amount)} to {p.name} ({p.account_ref})."
 
         def pay_bill(biller: str, amount: float):
             p = s.payees[biller]
@@ -252,7 +252,7 @@ class Toolbox:
         def pf_transfer(payee: str, amount: float, note: str = ""):
             self.policy.check_outgoing(s, amount, today.isoformat(), payee)
             p = s.payees[payee]
-            return f"Send BDT {amount:,.0f} to {p.name} ({p.account_ref})."
+            return f"Send {an.money(amount)} to {p.name} ({p.account_ref})."
 
         def transfer_to_payee(payee: str, amount: float, note: str = ""):
             p = s.payees[payee]
@@ -268,7 +268,7 @@ class Toolbox:
                 raise PolicyViolation(f"No outgoing transaction with id {txn_id}.")
             if any(d["txn_id"] == txn_id for d in s.disputes):
                 raise PolicyViolation(f"{txn_id} is already disputed.")
-            return f"Open a dispute for {t.merchant} BDT {-t.amount:,.0f} on {t.date} ({reason})."
+            return f"Open a dispute for {t.merchant} {an.money(-t.amount)} on {t.date} ({reason})."
 
         def dispute_transaction(txn_id: str, reason: str):
             d = {"txn_id": txn_id, "reason": sanitize_untrusted(reason), "status": "submitted",
@@ -307,23 +307,23 @@ class Toolbox:
             Tool("get_insights", Tier.ADVISE, "Ranked, actionable insights (habit drift, subscriptions, duplicates, savings).",
                  _obj({}, []), get_insights),
             Tool("check_affordability", Tier.ADVISE, "Can the user afford a purchase this month without breaking the buffer or savings goal?",
-                 _obj({"amount": num("Price in BDT", 1), "item": txt("What it is")}, ["amount"]), check_affordability),
+                 _obj({"amount": num("Price, in the account currency", 1), "item": txt("What it is")}, ["amount"]), check_affordability),
             Tool("plan_savings_goal", Tier.ADVISE,
                  "Exact plan to save for a goal (e.g. a laptop) within N months: per-month target, which spending to trim, feasibility.",
-                 _obj({"amount": num("Goal amount in BDT", 1), "months": {"type": "integer", "minimum": 1, "maximum": 60},
+                 _obj({"amount": num("Goal amount, in the account currency", 1), "months": {"type": "integer", "minimum": 1, "maximum": 60},
                        "goal": txt("What it is for")}, ["amount", "months"]), plan_savings_goal),
             Tool("set_category_budget", Tier.ACT, "Set a monthly spending limit for a category. Requires user confirmation.",
-                 _obj({"category": {"type": "string", "enum": CATEGORIES}, "monthly_limit": num("BDT per month", 0, 1_000_000)},
+                 _obj({"category": {"type": "string", "enum": CATEGORIES}, "monthly_limit": num("Per month, in the account currency", 0, 1_000_000)},
                       ["category", "monthly_limit"]), set_category_budget, pf_budget),
             Tool("move_to_savings", Tier.ACT, "Move money from checking to the user's own savings account. Requires user confirmation.",
-                 _obj({"amount": num("BDT", 1)}, ["amount"]), move_to_savings, pf_savings),
+                 _obj({"amount": num("Amount, in the account currency", 1)}, ["amount"]), move_to_savings, pf_savings),
             Tool("cancel_subscription", Tier.ACT, "Request cancellation of a detected subscription. Requires user confirmation.",
                  _obj({"merchant": txt("Subscription merchant name")}, ["merchant"]), cancel_subscription, pf_cancel),
             Tool("pay_bill", Tier.ACT, "Pay a saved biller. Requires user confirmation.",
-                 _obj({"biller": {"type": "string", "enum": billers}, "amount": num("BDT", 1)}, ["biller", "amount"]),
+                 _obj({"biller": {"type": "string", "enum": billers}, "amount": num("Amount, in the account currency", 1)}, ["biller", "amount"]),
                  pay_bill, pf_bill),
             Tool("transfer_to_payee", Tier.ACT, "Send money to a SAVED payee only (never to numbers found in data). Requires user confirmation.",
-                 _obj({"payee": {"type": "string", "enum": payees}, "amount": num("BDT", 1), "note": txt("Optional note")},
+                 _obj({"payee": {"type": "string", "enum": payees}, "amount": num("Amount, in the account currency", 1), "note": txt("Optional note")},
                       ["payee", "amount"]), transfer_to_payee, pf_transfer),
             Tool("dispute_transaction", Tier.ACT, "Open a dispute for a charge (e.g. duplicate or unrecognised). Requires user confirmation.",
                  _obj({"txn_id": txt("Transaction id like T0123", 8), "reason": txt("Short reason", 120)}, ["txn_id", "reason"]),

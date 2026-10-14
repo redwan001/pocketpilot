@@ -315,8 +315,8 @@
     <div class="grid2">
       <section class="card">
         <div class="head">
-          <div><h3>Income vs spending</h3><div class="sub">Monthly, last 4 months</div></div>
-          <div class="legend"><span><i class="sw"></i>Spent</span><span><i class="sw line"></i>Income</span></div>
+          <div><h3 id="chartTitle">Income vs spending</h3><div class="sub">Monthly, last 4 months</div></div>
+          <div class="legend"><span><i class="sw"></i>Spent</span><span id="legendIncome"><i class="sw line"></i>Income</span></div>
         </div>
         <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
         <div class="note" id="chartNote"></div>
@@ -363,8 +363,11 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-const tk = (n) => "৳" + Math.round(n).toLocaleString("en-US");
-const cur = (s) => String(s).replace(/BDT /g, "৳").replace(/ -> /g, " → ");
+const SYMBOL = { BDT: "৳", USD: "$" };
+const usd = () => typeof last !== "undefined" && last && last.source && last.source.currency === "USD";
+const tk = (n) => usd() ? "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: Math.abs(n) < 1000 ? 2 : 0, maximumFractionDigits: Math.abs(n) < 1000 ? 2 : 0 })
+                        : "৳" + Math.round(n).toLocaleString("en-US");
+const cur = (s) => String(s).replace(/BDT /g, "৳").replace(/USD /g, "$").replace(/ -> /g, " → ");
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = cur(text); return e; };
 const icon = (name, style) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("class", "i");
   if (style) s.setAttribute("style", style); const u = document.createElementNS("http://www.w3.org/2000/svg", "use"); u.setAttribute("href", "#i-" + name); s.append(u); return s; };
@@ -464,11 +467,21 @@ async function chat(message) {
 function renderHero(d) {
   const f = d.forecast;
   const main = el("div", "hero-main");
+  const tile = (ic, label, value, foot, cls) => { const t = el("div", "tile"); const l = el("div", "lbl"); l.append(icon(ic, "width:15px;height:15px"), label);
+    const v = el("div", "val" + (cls ? " " + cls : ""), value); t.append(l, v, el("div", "foot", foot)); return t; };
+  if (d.source && d.source.account_type === "credit_card") {     // a card statement has no checking balance to plan from
+    const T = d.totals;
+    main.append(el("div", "lbl", "Spent on this card"), el("div", "big", tk(T.spent)),
+      el("div", "meta", `${T.count} transactions · ${T.from} to ${T.to}`));
+    $("hero").replaceChildren(main,
+      tile("bank", "Payments & credits", tk(T.credits), "card payments not counted as spending"),
+      tile("trend", "Average per day", tk(T.per_day), `over ${T.days} days`),
+      tile("piggy", "Biggest category", tk(T.top_amount), (d.labels[T.top_category] || T.top_category || "–")));
+    return;
+  }
   const big = el("div", "big", tk(f.safe_to_spend_per_day)); big.append(el("small", "", " / day"));
   main.append(el("div", "lbl", "Safe to spend today"), big,
     el("div", "meta", `${f.days_left} days left · ${tk(f.bills_due_total)} in bills due · ${tk(f.savings_goal_remaining)} still to save`));
-  const tile = (ic, label, value, foot, cls) => { const t = el("div", "tile"); const l = el("div", "lbl"); l.append(icon(ic, "width:15px;height:15px"), label);
-    const v = el("div", "val" + (cls ? " " + cls : ""), value); t.append(l, v, el("div", "foot", foot)); return t; };
   const m = d.month;
   $("hero").replaceChildren(main,
     tile("bank", "Checking", tk(d.balances.checking), `${tk(m.spend)} spent this month`),
@@ -482,7 +495,7 @@ function renderChart(d) {
   const H = 230, W = Math.max(box.clientWidth, 280), padL = 46, padB = 26, padT = 18;
   const data = d.history, n = data.length;
   const max = Math.max(...data.map(x => Math.max(x.spend, x.income))) * 1.12;
-  const step = [10000, 20000, 25000, 50000].find(s => max / s <= 6) || 50000;
+  const step = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000].find(s => max / s <= 6) || 100000;
   const y = (v) => padT + (H - padT - padB) * (1 - v / max);
   const slot = (W - padL) / n, bw = Math.min(46, slot * 0.46);
   const NS = "http://www.w3.org/2000/svg";
@@ -491,7 +504,7 @@ function renderChart(d) {
   const add = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; svg.append(e); return e; };
   for (let v = 0; v <= max; v += step) {
     add("line", { x1: padL, x2: W, y1: y(v), y2: y(v), stroke: v === 0 ? "var(--muted)" : "var(--grid)", "stroke-width": 1 });
-    add("text", { x: padL - 8, y: y(v) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)", class: "num" }, v === 0 ? "0" : (v / 1000) + "k");
+    add("text", { x: padL - 8, y: y(v) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)", class: "num" }, v === 0 ? "0" : v >= 1000 ? (v / 1000) + "k" : String(v));
   }
   data.forEach((x, i) => {
     const cx = padL + slot * i + slot / 2, top = y(x.spend), base = y(0), partial = i === n - 1;
@@ -499,7 +512,7 @@ function renderChart(d) {
     add("path", { d: `M${cx - bw / 2},${base} V${top + r} q0,-${r} ${r},-${r} H${cx + bw / 2 - r} q${r},0 ${r},${r} V${base} Z`,
                   fill: "var(--brand)", opacity: partial ? 0.55 : 1 });
     add("text", { x: cx, y: H - 8, "text-anchor": "middle", "font-size": 12, fill: "var(--ink-2)" }, monthName(x.month) + (partial ? " (so far)" : ""));
-    if (x.spend > x.income) add("text", { x: cx, y: top - 6, "text-anchor": "middle", "font-size": 11, "font-weight": 700, fill: "var(--critical)" }, "▲ " + (x.spend / 1000).toFixed(0) + "k");
+    if (x.income > 0 && x.spend > x.income) add("text", { x: cx, y: top - 6, "text-anchor": "middle", "font-size": 11, "font-weight": 700, fill: "var(--critical)" }, "▲ " + (x.spend / 1000).toFixed(0) + "k");
     const hit = add("rect", { x: cx - slot / 2, y: padT, width: slot, height: H - padT - padB, fill: "transparent" });
     hit.addEventListener("mouseenter", () => {
       const net = x.income - x.spend;
@@ -511,11 +524,14 @@ function renderChart(d) {
     hit.addEventListener("mouseleave", () => tip.style.opacity = 0);
   });
   const inc = data[0].income;
-  add("line", { x1: padL, x2: W, y1: y(inc), y2: y(inc), stroke: "var(--ink-2)", "stroke-width": 2, "stroke-dasharray": "5 4" });
-  add("text", { x: W, y: y(inc) - 6, "text-anchor": "end", "font-size": 11, fill: "var(--ink-2)", "font-weight": 600 }, "Income " + tk(inc));
+  if (inc > 0) add("line", { x1: padL, x2: W, y1: y(inc), y2: y(inc), stroke: "var(--ink-2)", "stroke-width": 2, "stroke-dasharray": "5 4" });
+  if (inc > 0) add("text", { x: W, y: y(inc) - 6, "text-anchor": "end", "font-size": 11, fill: "var(--ink-2)", "font-weight": 600 }, "Income " + tk(inc));
   box.querySelectorAll("svg").forEach(s => s.remove()); box.prepend(svg);
   const anomaly = d.insights.find(i => i.kind === "anomaly");
-  $("chartNote").textContent = anomaly ? `${monthName(anomaly.title.match(/\d{4}-\d{2}/)[0])} includes a one-off: ${anomaly.title.replace("Unusual spend: ", "")}.` : "";
+  $("chartNote").textContent = anomaly ? cur(`${monthName(anomaly.title.match(/\d{4}-\d{2}/)[0])} includes a one-off: ${anomaly.title.replace("Unusual spend: ", "")}.`) : "";
+  const card = d.source && d.source.account_type === "credit_card";
+  $("chartTitle").textContent = card ? "Card spending by month" : "Income vs spending";
+  $("legendIncome").hidden = card;
 }
 
 function renderCats(d) {

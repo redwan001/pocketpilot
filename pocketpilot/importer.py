@@ -12,6 +12,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+from collections import Counter
 from datetime import date, timedelta
 
 from .categorize import categorize
@@ -22,10 +23,14 @@ DATE_RE = re.compile(
     r"^(\d{4}-\d{1,2}-\d{1,2}"                                    # 2026-09-12
     r"|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}"                           # 12/09/2026, 12-09-26
     r"|\d{1,2}[-/ ]?[A-Za-z]{3,9}[-/ ,]*\d{2,4}"                  # 12-Sep-2026, 12 Sep 26, 12SEP2026
-    r"|[A-Za-z]{3,9} \d{1,2},? \d{4})"                            # Sep 12, 2026
+    r"|[A-Za-z]{3,9} \d{1,2},? \d{4}"                             # Sep 12, 2026
+    r"|\d{1,2}/\d{1,2}(?![\d/]))"                                 # 09/03 (card statements: year from the period)
 )
-AMOUNT_RE = re.compile(r"^\(?[-+]?(?:BDT|Tk\.?|৳)?\s*[-+]?\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?\)?\s*(?:Dr|Cr|DR|CR|dr|cr)?\.?$")
-PDF_AMOUNT_RE = re.compile(r"^\(?[-+]?(?:BDT|Tk\.?|৳)?\s*[-+]?\d[\d,]*\.\d{2}\)?\s*(?:Dr|Cr|DR|CR|dr|cr)?\.?$")
+CUR = r"(?:BDT|Tk\.?|৳|USD|US\$|\$)?"
+AMOUNT_RE = re.compile(r"^\(?[-+]?" + CUR + r"\s*[-+]?\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?\)?\s*(?:Dr|Cr|DR|CR|dr|cr)?\.?$")
+PDF_AMOUNT_RE = re.compile(r"^\(?[-+]?" + CUR + r"\s*[-+]?\d[\d,]*\.\d{2}\)?\s*(?:Dr|Cr|DR|CR|dr|cr)?\.?$")
+CARD_HINTS = re.compile(r"credit limit|minimum payment|payment due date|new balance|available credit|card ?member", re.I)
+CARD_PAYMENT = re.compile(r"payment|thank you|autopay|auto-pay", re.I)
 SKIP_RE = re.compile(r"opening balance|balance b/?f|brought forward|closing balance|balance c/?f|carried forward|"
                      r"^total|grand total|page \d+|statement of account|available balance", re.I)
 
@@ -64,8 +69,18 @@ def parse_amount(text: str) -> tuple[float | None, str | None]:
     return (-v if neg else v), marker
 
 
-def parse_date(text: str, day_first: bool = True) -> date | None:
+def parse_date(text: str, day_first: bool = True, period_end: date | None = None) -> date | None:
     t = (text or "").strip().replace(",", " ")
+    m = re.match(r"^(\d{1,2})/(\d{1,2})$", t)
+    if m:                                        # no year: take it from the statement period
+        if period_end is None:
+            return None
+        a, b = int(m.group(1)), int(m.group(2))
+        d, mo = (a, b) if day_first else (b, a)
+        got = _safe_date(period_end.year, mo, d)
+        if got and got > period_end + timedelta(days=31):     # e.g. a Dec transaction on a Jan statement
+            got = _safe_date(period_end.year - 1, mo, d)
+        return got
     m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", t)
     if m:
         y, mo, d = map(int, m.groups())
@@ -99,8 +114,7 @@ def _safe_date(y, mo, d):
 def detect_day_first(samples: list[str]) -> bool:
     """Decide dd/mm vs mm/dd for numeric dates. Bangladesh uses dd/mm, so that's the default."""
     for s in samples:
-        m = re.match(r"^\s*(\d{1,2})[-/.](\d{1,2})[-/.]\d{2,4}", s or "")
-        if m:
+        for m in re.finditer(r"(?<![\d/])(\d{1,2})[-/.](\d{1,2})[-/.]\d{2,4}(?![\d/])", s or ""):
             a, b = int(m.group(1)), int(m.group(2))
             if a > 12:
                 return True
@@ -191,7 +205,8 @@ def parse_csv(text: str) -> dict:
             continue
         bal, _ = parse_amount(cell("balance"))
         out.append({"date": d, "amount": amt, "desc": desc, "balance": bal})
-    return {"rows": out, "skipped": skipped, "format": "csv"}
+    cur = "USD" if "$" in text and not re.search(r"BDT|Tk\.|৳", text) else "BDT"
+    return {"rows": out, "skipped": skipped, "format": "csv", "currency": cur, "account_type": "bank"}
 
 
 # ------------------------------------------------------------------ PDF (text items from pdf.js)
@@ -236,12 +251,33 @@ def parse_pdf_items(items: list[dict]) -> dict:
         raise StatementError("This PDF has no readable text. It may be a scanned image; please download the "
                              "statement as CSV or Excel from your bank, or a text (e-statement) PDF.")
     lines = [_merge_cells(l) for l in _lines(items)]
+    all_text = " ".join(str(it.get("text", "")) for it in items)
+    card = bool(CARD_HINTS.search(all_text))
+    currency = "USD" if re.search(r"\$\s?\d|U\.S\. dollars|USD", all_text) and not re.search(r"BDT|Tk\.|৳|taka", all_text, re.I) else "BDT"
     cols: dict[str, float] = {}
     rows, prev_bal, current = [], None, None
-    day_first = detect_day_first([l[0]["text"] for l in lines if l])
+    skipped = 0
+    day_first = detect_day_first([" ".join(c["text"] for c in l) for l in lines if l])
+    full_dates = [parse_date(m.group(0), day_first) for m in
+                  re.finditer(r"(?<![\d/])\d{1,2}/\d{1,2}/\d{2,4}(?![\d/])", all_text)]
+    full_dates = [d for d in full_dates if d]
+    period_end = None
+    pm = re.search(r"(?:opening\s*/\s*closing date|closing date|statement date|statement period|billing period|billing cycle)"
+                   r"[^0-9]{0,40}(\d{1,2}/\d{1,2}/\d{2,4})(?:\s*(?:-|to|–)\s*(\d{1,2}/\d{1,2}/\d{2,4}))?", all_text, re.I)
+    if pm:
+        period_end = parse_date(pm.group(2) or pm.group(1), day_first)
+    if period_end is None and full_dates:            # fall back to the most common year on the statement
+        common = Counter(d.year for d in full_dates).most_common(1)[0][0]
+        period_end = max(d for d in full_dates if d.year == common)
     for cells in lines:
         joined = " ".join(c["text"] for c in cells)
         low = joined.lower()
+        if ("debit" not in cols and "amount" in low and re.search(r"transaction|description|merchant|details|particulars", low)
+                and not re.search(r"debit|withdraw|deposit", low)):
+            for c in cells:                                  # single "Amount" column (card statements)
+                if "amount" in c["text"].lower():
+                    cols = {"amount": c["xc"]}
+            continue
         if re.search(r"debit|withdraw", low) and re.search(r"credit|deposit", low) and "balance" in low:
             for c in cells:                                  # header row: remember column positions
                 t = c["text"].lower()
@@ -260,7 +296,7 @@ def parse_pdf_items(items: list[dict]) -> dict:
             continue
         first = cells[0]["text"] if cells else ""
         dm = DATE_RE.match(first) or DATE_RE.match(joined)
-        d = parse_date(dm.group(0), day_first) if dm else None
+        d = parse_date(dm.group(0), day_first, period_end) if dm else None
         amount_cells = [c for c in cells if PDF_AMOUNT_RE.match(c["text"])]
         if d is None:
             if current is not None and not amount_cells and len(joined) < 120:
@@ -273,7 +309,24 @@ def parse_pdf_items(items: list[dict]) -> dict:
         if not amount_cells:
             continue
         debit = credit = bal = None
-        if cols:
+        if "amount" in cols or (card and not cols):
+            near = [c for c in amount_cells if "amount" not in cols or abs(c["xc"] - cols["amount"]) < 60] or amount_cells
+            v, marker = parse_amount(near[-1]["text"])
+            if v is None:
+                continue
+            if card:                                         # card: purchases positive, payments/credits negative
+                if v < 0 or marker == "cr":
+                    if CARD_PAYMENT.search(desc):
+                        skipped += 1                         # paying the card is a transfer, not income
+                        continue
+                    credit = abs(v)
+                else:
+                    debit = abs(v)
+            elif v < 0 or marker == "dr":
+                debit = abs(v)
+            else:
+                credit = abs(v)
+        elif cols:
             for c in amount_cells:
                 v, marker = parse_amount(c["text"])
                 near = min(cols, key=lambda k: abs(cols[k] - c["xc"]))
@@ -310,7 +363,8 @@ def parse_pdf_items(items: list[dict]) -> dict:
     if not rows:
         raise StatementError("Couldn't find any transactions in this PDF. If it's from a bank whose layout we don't "
                              "support yet, try the CSV or Excel download.")
-    return {"rows": rows, "skipped": 0, "format": "pdf"}
+    return {"rows": rows, "skipped": skipped, "format": "pdf", "account_type": "credit_card" if card else "bank",
+            "currency": currency}
 
 
 # ------------------------------------------------------------------ build a sandbox account from rows
@@ -325,16 +379,20 @@ def build_state(parsed: dict) -> tuple[SandboxState, date, dict]:
                         clean_merchant(r["desc"]), r["desc"][:200], guess_channel(r["desc"]))
         t.category = categorize(t)
         txns.append(t)
-    last_bal = next((r["balance"] for r in reversed(rows) if r.get("balance") is not None), None)
+    card = parsed.get("account_type") == "credit_card"
+    last_bal = None if card else next((r["balance"] for r in reversed(rows) if r.get("balance") is not None), None)
     net = sum(t.amount for t in txns)
-    checking = last_bal if last_bal is not None else max(net, 0.0)
+    checking = 0.0 if card else last_bal if last_bal is not None else max(net, 0.0)
     today = rows[-1]["date"] + timedelta(days=1)
     state = SandboxState(balances={"checking": round(checking, 2), "savings": 0.0}, transactions=txns,
-                         payees={})
+                         payees={}, currency=parsed.get("currency", "BDT"),
+                         account_type=parsed.get("account_type", "bank"))
     months = sorted({t.date[:7] for t in txns})
     info = {"transactions": len(txns), "from": txns[0].date, "to": txns[-1].date, "months": len(months),
             "format": parsed["format"], "skipped_rows": parsed.get("skipped", 0),
-            "balance_source": "statement" if last_bal is not None else "estimated from transactions",
+            "balance_source": "statement" if last_bal is not None else "not shown on a card statement" if card
+            else "estimated from transactions",
+            "account_type": parsed.get("account_type", "bank"), "currency": parsed.get("currency", "BDT"),
             "uncategorised": sum(t.category == "other" for t in txns)}
     if len(months) < 2:
         info["warning"] = "Less than two months of data: trends and budgets will be limited."

@@ -18,8 +18,36 @@ BUFFER = 5000.0                 # minimum checking balance the assistant always 
 DEFAULT_SAVINGS_PCT = 20
 
 
+_CURRENCY = {"code": "BDT"}
+
+
+def set_currency(code: str) -> None:
+    """The account's currency. BDT for the demo; an uploaded card statement may be USD."""
+    _CURRENCY["code"] = code if code in ("BDT", "USD") else "BDT"
+
+
+def currency() -> str:
+    return _CURRENCY["code"]
+
+
+def scale() -> float:
+    """Thresholds are written in taka; scale them for other currencies (1 USD is roughly 100+ BDT)."""
+    return 1.0 if currency() == "BDT" else 0.01
+
+
+def unit() -> int:
+    """Rounding step for budgets: BDT 100, or 5 in dollars."""
+    return 100 if currency() == "BDT" else 5
+
+
+def buffer() -> float:
+    return BUFFER * scale()
+
+
 def money(x: float) -> str:
-    return f"BDT {x:,.0f}"
+    if currency() == "BDT":
+        return f"BDT {x:,.0f}"
+    return f"{currency()} {x:,.2f}" if abs(x) < 1000 else f"{currency()} {x:,.0f}"
 
 
 def _d(s: str) -> date:
@@ -161,7 +189,7 @@ def detect_anomalies(txns, today: date, window_days: int = 60) -> list[dict]:
         reason = None
         if len(peers) >= 3:
             m, s = mean(peers), pstdev(peers)
-            if amt >= 3000 and amt > max(3 * median(peers), m + 3 * s):
+            if amt >= 3000 * scale() and amt > max(3 * median(peers), m + 3 * s):
                 reason = f"{money(amt)} is far above your usual {LABELS.get(t.category, t.category).lower()} spend (~{money(median(peers))})"
         if reason is None and income >= 1000 and amt >= 0.2 * income:
             reason = f"one-off spend of {money(amt)} is {100 * amt / income:.0f}% of your monthly income"
@@ -181,15 +209,15 @@ def budget_plan(txns, today: date, savings_pct: float = DEFAULT_SAVINGS_PCT) -> 
     wants = sum(r["avg"] for r in trends if r["category"] not in NEEDS)
     savings_target = income * savings_pct / 100
     # Needs are budgeted at their current cost (latest month or average, whichever is higher,
-    # rounded up to BDT 100); wants are then scaled down so the savings target still fits.
-    need_budget = {r["category"]: math.ceil(max(r["avg"], r["monthly"][-1]) / 100) * 100
+    # rounded up to the budget unit); wants are then scaled down so the savings target still fits.
+    need_budget = {r["category"]: math.ceil(max(r["avg"], r["monthly"][-1]) / unit()) * unit()
                    for r in trends if r["category"] in NEEDS}
     allowed_wants = max(0.0, income - sum(need_budget.values()) - savings_target)
     scale = min(1.0, allowed_wants / wants) if wants else 1.0
     cats = []
     for r in trends:
         is_need = r["category"] in NEEDS
-        budget = need_budget[r["category"]] if is_need else math.floor(r["avg"] * scale / 100) * 100
+        budget = need_budget[r["category"]] if is_need else math.floor(r["avg"] * scale / unit()) * unit()
         cats.append({"category": r["category"], "label": r["label"], "type": "need" if is_need else "want",
                      "avg_spend": r["avg"], "budget": float(budget)})
     total_budget = sum(c["budget"] for c in cats)
@@ -231,7 +259,7 @@ def forecast_month_end(state, today: date, savings_pct: float = DEFAULT_SAVINGS_
     month = today.isoformat()[:7]
     saved = monthly_summary(txns, month)["moved_to_savings"]
     goal_left = max(0.0, avg_monthly_income(txns, today) * savings_pct / 100 - saved)
-    safe_today = max(0.0, (balance - due_total - goal_left - BUFFER) / days_left)
+    safe_today = max(0.0, (balance - due_total - goal_left - buffer()) / days_left)
     return {
         "as_of": today.isoformat(),
         "checking_balance": round(balance, 2),
@@ -248,10 +276,10 @@ def forecast_month_end(state, today: date, savings_pct: float = DEFAULT_SAVINGS_
 def affordability(state, today: date, amount: float) -> dict:
     f = forecast_month_end(state, today)
     after = f["projected_month_end_balance"] - amount
-    verdict = ("yes" if after - f["savings_goal_remaining"] >= BUFFER
-               else "tight" if after >= BUFFER else "no")
+    verdict = ("yes" if after - f["savings_goal_remaining"] >= buffer()
+               else "tight" if after >= buffer() else "no")
     return {"amount": amount, "projected_after_purchase": round(after, 2), "verdict": verdict,
-            "buffer": BUFFER, "savings_goal_remaining": f["savings_goal_remaining"]}
+            "buffer": buffer(), "savings_goal_remaining": f["savings_goal_remaining"]}
 
 
 def compare_months(txns, a: str, b: str) -> dict:
@@ -283,10 +311,10 @@ def savings_goal_plan(state, today: date, amount: float, months: int) -> dict:
     need = amount / months
     gap = max(0.0, need - max(surplus, 0.0))
     cuts, remaining = [], gap
-    for r in sorted((r for r in trends if r["category"] in WANTS and r["avg"] >= 300), key=lambda r: -r["avg"]):
+    for r in sorted((r for r in trends if r["category"] in WANTS and r["avg"] >= 300 * scale()), key=lambda r: -r["avg"]):
         if remaining <= 0:
             break
-        cut = min(math.ceil(r["avg"] * 0.5 / 100) * 100, math.ceil(remaining / 100) * 100)  # trim a want by at most half
+        cut = min(math.ceil(r["avg"] * 0.5 / unit()) * unit(), math.ceil(remaining / unit()) * unit())  # trim a want by at most half
         cuts.append({"category": r["category"], "label": r["label"], "current_per_month": round(r["avg"]),
                      "suggested_limit": round(r["avg"] - cut), "saves_per_month": cut})
         remaining -= cut
@@ -322,7 +350,7 @@ def insights(state, today: date) -> list[dict]:
     budgets = {c["category"]: c["budget"] for c in plan["categories"]}
 
     for r in category_trends(txns, today):
-        if r["category"] in WANTS and r["change_pct"] and r["change_pct"] >= 30 and r["monthly"][-1] >= 2000:
+        if r["category"] in WANTS and r["change_pct"] and r["change_pct"] >= 30 and r["monthly"][-1] >= 2000 * scale():
             extra = r["monthly"][-1] - r["monthly"][0]
             out.append({
                 "id": f"drift_{r['category']}", "kind": "habit_drift",
@@ -369,13 +397,13 @@ def insights(state, today: date) -> list[dict]:
         })
 
     months = full_months(txns, today)[-3:]
-    if months:
+    if months and avg_monthly_income(txns, today) > 0:      # no savings rate without income (e.g. a card statement)
         one_offs = {a["txn_id"] for a in detect_anomalies(txns, today, window_days=400)}
         rates = [monthly_summary(txns, m, one_offs)["savings_rate_pct"] or 0 for m in months]
         avg_rate = mean(rates)
         if avg_rate < DEFAULT_SAVINGS_PCT:
             f = forecast_month_end(state, today)
-            movable = max(0.0, state.balances["checking"] - f["bills_due_total"] - BUFFER
+            movable = max(0.0, state.balances["checking"] - f["bills_due_total"] - buffer()
                           - f["avg_daily_flexible_spend"] * f["days_left"])
             amount = float(int(min(movable, f["savings_goal_remaining"]) // 500 * 500))
             out.append({
@@ -389,7 +417,9 @@ def insights(state, today: date) -> list[dict]:
 
     needs = plan["needs_avg"] or 1
     cover = state.balances["savings"] / needs
-    if state.balances["savings"] <= 0:
+    if state.account_type == "credit_card":
+        pass                                                   # a card statement says nothing about savings
+    elif state.balances["savings"] <= 0:
         out.append({
             "id": "emergency_fund", "kind": "resilience",
             "title": "No emergency fund in this account",

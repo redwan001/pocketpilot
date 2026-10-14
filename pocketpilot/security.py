@@ -94,6 +94,7 @@ class Policy:
     min_checking_balance: float = 5000.0
     max_actions_per_minute: int = 10
     confirmation_ttl_seconds: int = 300
+    currency: str = "BDT"
 
 
 class PolicyViolation(Exception):
@@ -112,11 +113,11 @@ class PolicyEngine:
         if payee_key is not None and payee_key not in state.payees:
             raise PolicyViolation("Payee is not on your saved payee list. Add it in the banking app first.")
         if amount > p.max_single_transfer:
-            raise PolicyViolation(f"BDT {amount:,.0f} exceeds the single-transfer limit of BDT {p.max_single_transfer:,.0f}.")
+            raise PolicyViolation(f"{p.currency} {amount:,.0f} exceeds the single-transfer limit of {p.currency} {p.max_single_transfer:,.0f}.")
         if self._outgoing_today.get(day, 0) + amount > p.daily_outgoing_cap:
-            raise PolicyViolation(f"This would exceed today's outgoing cap of BDT {p.daily_outgoing_cap:,.0f}.")
+            raise PolicyViolation(f"This would exceed today's outgoing cap of {p.currency} {p.daily_outgoing_cap:,.0f}.")
         if state.balances["checking"] - amount < p.min_checking_balance:
-            raise PolicyViolation(f"This would leave less than the BDT {p.min_checking_balance:,.0f} safety buffer in checking.")
+            raise PolicyViolation(f"This would leave less than the {p.currency} {p.min_checking_balance:,.0f} safety buffer in checking.")
 
     def record_outgoing(self, amount: float, day: str):
         self._outgoing_today[day] = self._outgoing_today.get(day, 0) + amount

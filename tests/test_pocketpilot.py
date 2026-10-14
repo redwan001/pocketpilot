@@ -320,6 +320,57 @@ class TestStatementImport(unittest.TestCase):
         with self.assertRaises(StatementError):
             load_statement("csv", "hello,world\n1,2\n")
 
+    @staticmethod
+    def card_items():
+        """A synthetic US credit-card statement laid out like a typical card issuer's PDF (made-up data)."""
+        rows, y = [], 790.0
+        def line(*cells):
+            nonlocal y
+            for x, t in cells:
+                rows.append({"page": 1, "x": x, "y": y, "w": 6.0 * len(t), "text": t})
+            y -= 13.0
+        line((40, "New Balance"), (300, "$1,234.56"))
+        line((40, "Payment Due Date"), (300, "10/26/26"))
+        line((40, "Opening/Closing Date"), (300, "09/02/26 - 10/01/26"))
+        line((40, "Credit Limit"), (300, "$5,000"))
+        line((40, "Offer valid until 12/31/27"))
+        line((40, "ACCOUNT ACTIVITY"))
+        line((28, "Date of"), (110, "Merchant Name or Transaction Description"), (452, "$ Amount"))
+        line((26, "09/03"), (110, "Payment Thank You-Mobile"), (464, "-40.00"))
+        line((26, "09/05"), (110, "UBER *EATS HELP.UBER.COM CA"), (466, "33.86"))
+        line((26, "09/07"), (110, "KROGER #123 SPRINGFIELD IL"), (462, "120.40"))
+        line((26, "09/09"), (110, "LYFT *RIDE TUE"), (470, "14.10"))
+        line((26, "09/12"), (110, "REFUND AMAZON.COM"), (466, "-25.00"))
+        line((26, "09/30"), (110, "NETFLIX.COM"), (470, "15.49"))
+        return rows
+
+    def test_credit_card_statement(self):
+        from pocketpilot.importer import load_statement
+        state, today, info = load_statement("pdf_items", self.card_items())
+        self.assertEqual(info["account_type"], "credit_card")
+        self.assertEqual(info["currency"], "USD")
+        self.assertEqual((info["from"], info["to"]), ("2026-09-05", "2026-09-30"))   # year from the period, not 2027
+        self.assertEqual(info["transactions"], 5)                                      # card payment excluded
+        self.assertAlmostEqual(-sum(t.amount for t in state.transactions if t.amount < 0), 33.86 + 120.40 + 14.10 + 15.49)
+        cats = {t.merchant.split()[0]: t.category for t in state.transactions}
+        self.assertEqual(cats["UBER"], "food_delivery")
+        self.assertEqual(cats["KROGER"], "groceries")
+        self.assertEqual(cats["LYFT"], "transport")
+        self.assertEqual(state.balances["checking"], 0.0)
+
+    def test_card_statement_dashboard_uses_dollars(self):
+        from pocketpilot import analytics as an
+        from pocketpilot.api import App
+        app = App("offline")
+        code, _ = app.handle("POST", "/api/statement", {"kind": "pdf_items", "data": self.card_items(), "use_ai": False})
+        self.assertEqual(code, 200)
+        d = app.handle("GET", "/api/dashboard")[1]
+        self.assertEqual(d["source"]["currency"], "USD")
+        self.assertAlmostEqual(d["totals"]["spent"], 183.85, places=2)
+        self.assertTrue(an.money(12.5).startswith("USD"))
+        app.handle("POST", "/api/reset")
+        self.assertTrue(an.money(12.5).startswith("BDT"))                               # demo is back in taka
+
     def test_agent_runs_on_uploaded_statement(self):
         from pocketpilot.api import App
         app = App("offline")

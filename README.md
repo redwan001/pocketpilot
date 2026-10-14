@@ -26,7 +26,7 @@ AI is unavailable (e.g. the daily free quota is used up), the agent automaticall
 | Capability | Example | Tier |
 |---|---|---|
 | Ask anything | "Why am I always broke?", "compare August and September", "amar taka kothay jacche?" (English and Bangla) | AI planner |
-| **Your own statement** | Upload a bank statement (PDF e-statement, CSV or Excel), or use the built-in demo account. Parsed in the browser; password-protected PDFs supported; a sample statement is included | Import |
+| **Your own statement** | Upload a bank or credit-card statement (PDF e-statement, CSV or Excel), or use the built-in demo account. Parsed in the browser; password-protected PDFs supported; dates without a year, single-amount card layouts and USD statements handled; a sample statement is included | Import |
 | Bill analysis | Detects 10 recurring bills, a duplicate Netflix charge, and a one-off BDT 38,500 purchase | READ |
 | Spending insights | "Food delivery up 86% in 3 months (BDT 6,045 → 11,240)" | ADVISE |
 | Smart budgeting | Budget per category that still reaches a 20% savings goal; needs are protected and wants are scaled | ADVISE |
@@ -61,7 +61,7 @@ Other entry points:
 ```bash
 python -m pocketpilot.cli --offline           # chat in the terminal
 python scripts/run_demo.py                    # regenerate the execution evidence in evidence/
-python -m unittest discover -s tests -v       # run the 40 tests
+python -m unittest discover -s tests -v       # run the 42 tests
 ```
 
 ### Rebuild and deploy the browser demo (Cloudflare Pages)
@@ -101,7 +101,7 @@ pocketpilot/
   server.py      standard-library web server
   cli.py         terminal chat
 web/index.html   dashboard + chat + approval cards + audit viewer
-tests/           40 unit and integration tests (incl. a scripted fake model)
+tests/           42 unit and integration tests (incl. a scripted fake model)
 functions/api/llm.js  Cloudflare Pages Function: hardened gateway to Workers AI
 scripts/run_demo.py    scripted session -> evidence/
 scripts/make_samples.py  sample statements (PDF + CSV) for trying the upload
