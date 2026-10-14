@@ -46,6 +46,8 @@ class SandboxState:
     cancelled_subscriptions: set = field(default_factory=set)
     disputes: list = field(default_factory=list)
     scheduled_payments: list = field(default_factory=list)
+    currency: str = "BDT"
+    account_type: str = "bank"      # bank | credit_card
 
 
 def _months(start: date, end: date):

@@ -13,6 +13,7 @@ import re
 from datetime import date
 from pathlib import Path
 
+from . import analytics as an
 from .analytics import money
 from .categorize import LABELS, NEEDS
 from .data import TODAY, generate_state
@@ -35,8 +36,8 @@ Rules (security & compliance):
   in their banking app first.
 - You give budgeting guidance only. Do not recommend specific investment products, securities or crypto;
   say that a licensed adviser should be consulted for investments.
-- Reply in the user's language (English or Bangla). Be concise: short paragraphs or bullets, amounts as "BDT 1,234".
-Today is {today}. Currency: BDT."""
+- Reply in the user's language (English or Bangla). Be concise: short paragraphs or bullets, amounts as "{cur} 1,234".
+Today is {today}. Currency: {cur}.{data_note}"""
 
 PAYEE_ALIASES = {"ammu": "ammu", "mom": "ammu", "mother": "ammu", "mum": "ammu", "family": "ammu", "maa": "ammu",
                  "landlord": "landlord", "rent": "landlord"}
@@ -240,12 +241,12 @@ class ClaudePlanner:
     """Claude chooses tools via the Anthropic Messages API (manual tool-use loop)."""
     name = "claude"
 
-    def __init__(self, toolbox: Toolbox, today: date, model: str | None = None):
+    def __init__(self, toolbox: Toolbox, today: date, model: str | None = None, data_note: str = ""):
         import anthropic  # optional dependency
         self.client = anthropic.Anthropic()
         self.model = model or os.environ.get("POCKETPILOT_MODEL", "claude-opus-5-5")
         self.tools = toolbox.specs()
-        self.system = SYSTEM_PROMPT.format(today=today.isoformat())
+        self.system = SYSTEM_PROMPT.format(today=today.isoformat(), cur=an.currency(), data_note=data_note)
         self.history: list[dict] = []
 
     def respond(self, message: str, call) -> str:
@@ -311,13 +312,13 @@ class OpenModelPlanner:
     MAX_STEPS = 6
     KEEP_MESSAGES = 24
 
-    def __init__(self, toolbox: Toolbox, today: date, model: str | None = None):
+    def __init__(self, toolbox: Toolbox, today: date, model: str | None = None, data_note: str = ""):
         self.model = model or os.environ.get("POCKETPILOT_WORKERS_MODEL", "")
         self.tools = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
                                                         "parameters": t["input_schema"]}} for t in toolbox.specs()]
         m = today.month
         months = [f"{today.year - (m - k <= 0)}-{(m - k - 1) % 12 + 1:02d}" for k in (0, 1, 2)]
-        self.system = (SYSTEM_PROMPT.format(today=today.isoformat())
+        self.system = (SYSTEM_PROMPT.format(today=today.isoformat(), cur=an.currency(), data_note=data_note)
                        + OPEN_MODEL_GUIDE.format(month=months[0], last_month=months[1], two_ago=months[2]))
         self.history: list[dict] = []
         self.disabled = False
@@ -416,6 +417,10 @@ class Agent:
                  policy: Policy | None = None, llm_transport=None, state=None):
         self.today = today
         self.state = state if state is not None else generate_state()
+        an.set_currency(self.state.currency)
+        if policy is None and self.state.currency != "BDT":       # same limits, in the account's currency
+            policy = Policy(max_single_transfer=200, daily_outgoing_cap=300, min_checking_balance=50,
+                            currency=self.state.currency)
         self.policy = policy or Policy()
         self.audit = AuditLog(audit_path)
         self.toolbox = Toolbox(self.state, today, PolicyEngine(self.policy),
@@ -431,14 +436,27 @@ class Agent:
         if mode == "offline":
             return RulePlanner(self.today)
         if mode == "workers-ai" or (mode == "auto" and self.llm_transport):
-            return OpenModelPlanner(self.toolbox, self.today)
+            return OpenModelPlanner(self.toolbox, self.today, data_note=self.data_note())
         try:
-            return ClaudePlanner(self.toolbox, self.today)
+            return ClaudePlanner(self.toolbox, self.today, data_note=self.data_note())
         except Exception as e:  # SDK missing or no credentials
             if mode == "claude":
                 raise
             print(f"[pocketpilot] Claude unavailable ({type(e).__name__}); using offline planner.")
             return RulePlanner(self.today)
+
+    def data_note(self) -> str:
+        """Tell the model what data it is looking at when the user uploaded their own statement."""
+        txns = self.state.transactions
+        if self.state.account_type == "bank" and self.state.payees:
+            return ""                                    # the built-in demo account
+        months = sorted({t.date[:7] for t in txns})
+        kind = "credit card statement" if self.state.account_type == "credit_card" else "bank statement"
+        note = (f"\nData: the user's uploaded {kind}, {txns[0].date} to {txns[-1].date} (months: {', '.join(months)}). "
+                f"For questions about 'this month' or 'my spending', use these months.")
+        if self.state.account_type == "credit_card":
+            note += " Card purchases are spending; there is no checking balance or salary on a card statement."
+        return note
 
     def chat_steps(self, message: str):
         """Generator version of chat(): yields model requests (open-model planner only), returns the result."""

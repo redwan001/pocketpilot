@@ -22,7 +22,8 @@ class App:
     def reset(self):
         """Back to the built-in demo account."""
         self.agent = Agent(mode=self.mode, audit_path=self.audit_path)
-        self.source = {"kind": "demo", "name": "Demo account (Rafi, synthetic data)", "ai": self.mode != "offline"}
+        self.source = {"kind": "demo", "name": "Demo account (Rafi, synthetic data)", "ai": self.mode != "offline",
+                       "currency": "BDT", "account_type": "bank"}
         self._gen = None
 
     def load_statement(self, kind: str, payload, filename: str = "", use_ai: bool = True) -> dict:
@@ -80,6 +81,7 @@ class App:
             "audit": {"entries": len(a.audit.entries), "verified": ok},
             "planner": a.planner.name,
             "source": self.source,
+            "totals": self._totals(),
             "today": today.isoformat(),
             "balances": s.balances,
             "month": summary,
@@ -93,6 +95,22 @@ class App:
             "pending": [{"token": p.token, "tool": p.tool, "summary": p.summary}
                         for p in a.toolbox.confirmations.pending()],
         }
+
+    def _totals(self) -> dict:
+        """Whole-period totals (used for card statements, which have no checking balance)."""
+        txns = self.agent.state.transactions
+        spent = [t for t in txns if t.amount < 0 and t.category != "savings"]
+        by_cat: dict[str, float] = {}
+        for t in spent:
+            by_cat[t.category] = by_cat.get(t.category, 0.0) - t.amount
+        named = {k: v for k, v in by_cat.items() if k != "other"} or by_cat
+        top = max(named.items(), key=lambda kv: kv[1]) if named else (None, 0.0)
+        days = (an.date.fromisoformat(txns[-1].date) - an.date.fromisoformat(txns[0].date)).days + 1 if txns else 1
+        total = sum(-t.amount for t in spent)
+        return {"spent": round(total, 2), "credits": round(sum(t.amount for t in txns if t.amount > 0), 2),
+                "count": len(txns), "days": days, "per_day": round(total / days, 2),
+                "top_category": top[0], "top_amount": round(top[1], 2), "from": txns[0].date if txns else None,
+                "to": txns[-1].date if txns else None}
 
     def handle(self, method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
         body = body or {}
