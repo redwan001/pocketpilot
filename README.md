@@ -52,7 +52,7 @@ See [docs/SECURITY_SELF_ASSESSMENT.md](docs/SECURITY_SELF_ASSESSMENT.md).
 Requires Python 3.10+ and nothing else. The core uses only the standard library.
 
 ```bash
-git clone <your-repo-url> pocketpilot && cd pocketpilot
+git clone https://github.com/redwan001/pocketpilot.git && cd pocketpilot
 python -m pocketpilot.server --offline        # open http://127.0.0.1:8000
 ```
 
