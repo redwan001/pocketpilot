@@ -1,0 +1,3 @@
+# Core needs only the Python standard library (3.10+).
+# Optional: Claude as the planner.
+anthropic

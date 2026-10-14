@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PocketPilot</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f4f6f5; --surface: #ffffff; --surface-2: #f7f9f8; --ink: #0d1a15; --ink-2: #4a5852; --muted: #84918b;
+    --line: #e3e8e5; --grid: #edf1ef;
+    --brand: #0d7a58; --brand-2: #0a5f45; --brand-ink: #ffffff; --brand-soft: #e2f3ec; --brand-tint: #f0f9f5;
+    --good: #0ca30c; --warning: #c98500; --serious: #e0703f; --critical: #d03b3b;
+    --critical-soft: #fdecec; --warning-soft: #fff5e0; --serious-soft: #fdf0e9;
+    --read: #2a78d6; --advise: #6b4fd0; --act: #c46b0a;
+    --shadow: 0 1px 2px rgba(13, 26, 21, .05), 0 4px 16px rgba(13, 26, 21, .05);
+    --r: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0b100e; --surface: #141b18; --surface-2: #19221e; --ink: #eef4f1; --ink-2: #b5c2bc; --muted: #7f8c86;
+      --line: #24302b; --grid: #1e2824;
+      --brand: #2fb487; --brand-2: #1f9a70; --brand-ink: #04130d; --brand-soft: #143528; --brand-tint: #111f19;
+      --critical-soft: #3a1717; --warning-soft: #33280f; --serious-soft: #35200f;
+      --read: #6aa6f0; --advise: #a995f2; --act: #f0a44b;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--page); color: var(--ink); font: 14.5px/1.5 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- top bar ---------- */
+  .top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--surface) 88%, transparent);
+         backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .top-in { max-width: 1360px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 14px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.2px; }
+  .mark { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center;
+          background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: var(--brand-ink); }
+  .pill { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+  .pill.ai { background: var(--brand-soft); color: var(--brand); }
+  .pill.sandbox { background: var(--warning-soft); color: var(--warning); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .grow { flex: 1; }
+  .user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line);
+            display: grid; place-items: center; font-weight: 700; color: var(--brand); }
+  .ghost { border: 1px solid var(--line); background: var(--surface); padding: 7px 12px; border-radius: 10px; font-size: 13px; }
+  .ghost:hover { background: var(--surface-2); }
+
+  /* ---------- layout ---------- */
+  .wrap { max-width: 1360px; margin: 0 auto; padding: 20px 24px 40px; display: grid;
+          grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
+  .col { display: grid; gap: 20px; min-width: 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 20px; min-width: 0; }
+  .card h3 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.1px; }
+  .card .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  .grid2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; }
+
+  /* ---------- hero ---------- */
+  .hero { display: grid; grid-template-columns: 1.25fr 1fr 1fr 1fr; gap: 14px; }
+  .hero-main { border-radius: var(--r); padding: 20px 22px; color: #fff; position: relative; overflow: hidden;
+               background: radial-gradient(120% 140% at 100% 0%, #18a777 0%, #0d7a58 45%, #08503a 100%); box-shadow: var(--shadow); }
+  .hero-main::after { content: ""; position: absolute; right: -40px; bottom: -60px; width: 200px; height: 200px; border-radius: 50%;
+                      background: rgba(255, 255, 255, .07); }
+  .hero-main .lbl { font-size: 13px; opacity: .9; font-weight: 600; }
+  .hero-main .big { font-size: 40px; font-weight: 750; letter-spacing: -1px; line-height: 1.1; margin: 6px 0 4px; }
+  .hero-main .big small { font-size: 16px; font-weight: 600; opacity: .85; letter-spacing: 0; }
+  .hero-main .meta { font-size: 12.5px; opacity: .9; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; box-shadow: var(--shadow); }
+  .tile .lbl { font-size: 12.5px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .tile .val { font-size: 24px; font-weight: 700; letter-spacing: -.4px; margin-top: 6px; }
+  .tile .foot { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+  .neg { color: var(--critical); } .pos { color: var(--good); }
+
+  /* ---------- chart ---------- */
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: 230px; overflow: visible; }
+  .tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12px; padding: 8px 10px;
+         border-radius: 8px; white-space: nowrap; transform: translate(-50%, -110%); opacity: 0; transition: opacity .12s; z-index: 3; }
+  .tip b { display: block; font-size: 12.5px; margin-bottom: 2px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; background: var(--brand); }
+  .sw.line { height: 0; border-top: 2px dashed var(--ink-2); border-radius: 0; width: 14px; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  /* ---------- categories ---------- */
+  .cats { display: grid; gap: 12px; }
+  .cat { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; }
+  .cat .nm { font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: center; min-width: 0; }
+  .cat .amt { font-size: 13px; font-weight: 600; text-align: right; }
+  .trk { grid-column: 1 / -1; height: 8px; background: var(--grid); border-radius: 6px; position: relative; }
+  .trk .f { height: 100%; border-radius: 4px; background: var(--brand); }
+  .trk .f.over { background: var(--serious); }
+  .trk .lim { position: absolute; top: -4px; bottom: -4px; width: 3px; border-radius: 2px; background: var(--ink); }
+  .chg { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 6px; background: var(--critical-soft); color: var(--critical); }
+  .lim-note { font-size: 11px; color: var(--ink-2); font-weight: 500; }
+
+  /* ---------- insights ---------- */
+  .ins { display: grid; gap: 10px; }
+  .in { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: start; padding: 14px; border-radius: 12px;
+        border: 1px solid var(--line); background: var(--surface-2); }
+  .in .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
+  .in.critical .ic { background: var(--critical-soft); color: var(--critical); }
+  .in.warning .ic { background: var(--warning-soft); color: var(--warning); }
+  .in.serious .ic { background: var(--serious-soft); color: var(--serious); }
+  .in .t { font-weight: 650; font-size: 13.5px; }
+  .in .d { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+  .in .tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+  .in.critical .tag { color: var(--critical); } .in.warning .tag { color: var(--warning); } .in.serious .tag { color: var(--serious); }
+  .in .tag.ok { color: var(--brand); }
+  .do { border: 0; background: var(--brand); color: var(--brand-ink); font-size: 12.5px; font-weight: 600; padding: 7px 12px;
+        border-radius: 9px; white-space: nowrap; }
+  .do:hover { background: var(--brand-2); }
+  .impact { font-size: 12px; font-weight: 700; color: var(--good); margin-top: 4px; }
+
+  /* ---------- bills ---------- */
+  .bills { display: grid; }
+  .bill { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .bill:first-child { border-top: 0; padding-top: 0; }
+  .date { text-align: center; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); padding: 4px 0; line-height: 1.1; }
+  .date b { display: block; font-size: 16px; } .date span { font-size: 10px; color: var(--muted); text-transform: uppercase; font-weight: 700; }
+  .bill .n { font-weight: 600; font-size: 13px; } .bill .c { font-size: 12px; color: var(--muted); }
+
+  /* ---------- protection ---------- */
+  .shield { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .rule { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--surface-2); }
+  .rule .k { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .rule .v { font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .chain { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; margin-top: 14px; }
+  .chain.ok { color: var(--good); } .chain.bad { color: var(--critical); }
+  details { margin-top: 10px; } summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
+  .audit { font: 11.5px/1.5 ui-monospace, Consolas, monospace; max-height: 240px; overflow: auto; background: var(--surface-2);
+           border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-top: 8px; }
+  .audit div { padding: 3px 0; border-bottom: 1px dashed var(--line); overflow-wrap: anywhere; color: var(--ink-2); }
+  .audit .ev { color: var(--ink); font-weight: 700; }
+
+
+  /* ---------- Pilo, the mascot ---------- */
+  .pilo { display: inline-block; flex: none; }
+  .pilo svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .pilo .body-g { animation: pbob 3.2s ease-in-out infinite; }
+  .pilo .eyes { animation: pblink 4.6s infinite; transform-origin: 32px 34px; }
+  .pilo .pupils { transition: transform .25s; }
+  .pilo .m-grin, .pilo .m-flat, .pilo .brows { display: none; }
+  .pilo.thinking .coin { animation: pflip .9s ease-in-out infinite; transform-origin: 32px 6px; }
+  .pilo.thinking .pupils { transform: translate(1.6px, -2px); }
+  .pilo.happy .body-g { animation: phop .45s ease-in-out 3; }
+  .pilo.happy .m-smile { display: none; } .pilo.happy .m-grin { display: inline; }
+  .pilo.alert .m-smile { display: none; } .pilo.alert .m-flat, .pilo.alert .brows { display: inline; }
+  .pilo.alert .coin-face { fill: #e5484d; } .pilo.alert .coin-rim { stroke: #b4232a; }
+  @keyframes pbob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
+  @keyframes pblink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.12); } }
+  @keyframes pflip { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(.15); } }
+  @keyframes phop { 50% { transform: translateY(-6px); } }
+  @media (prefers-reduced-motion: reduce) { .pilo * { animation: none !important; } }
+  .brow { display: flex; gap: 8px; align-items: flex-end; align-self: flex-start; max-width: 94%; }
+  .brow .msg { max-width: 100%; }
+  .brow .typing { align-self: auto; }
+  .bot-av.has-pilo { background: none; width: 44px; height: 44px; }
+
+  /* ---------- chat ---------- */
+  .chat { position: sticky; top: 76px; height: calc(100vh - 96px); min-height: 560px; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+  .chat-h { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; }
+  .bot-av { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg, var(--brand), var(--brand-2));
+            display: grid; place-items: center; color: var(--brand-ink); }
+  .chat-h .t { font-weight: 700; } .chat-h .s { font-size: 12px; color: var(--good); display: flex; align-items: center; gap: 6px; }
+  .log { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; background: var(--brand-tint); }
+  .msg { max-width: 88%; padding: 10px 13px; border-radius: 14px; white-space: pre-wrap; font-size: 13.5px; line-height: 1.5; }
+  .msg.user { align-self: flex-end; background: var(--brand); color: var(--brand-ink); border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .chip { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; letter-spacing: .2px; }
+  .chip.read { background: color-mix(in srgb, var(--read) 14%, transparent); color: var(--read); }
+  .chip.advise { background: color-mix(in srgb, var(--advise) 14%, transparent); color: var(--advise); }
+  .chip.act { background: color-mix(in srgb, var(--act) 16%, transparent); color: var(--act); }
+  .chip.err { background: var(--critical-soft); color: var(--critical); }
+  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+  .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: b 1s infinite; }
+  .typing .tl { font-size: 12px; color: var(--muted); margin-left: 6px; animation: none; width: auto; height: auto; background: none; }
+  .md p { margin: 0 0 6px; } .md p:last-child { margin-bottom: 0; } .md p.h { font-weight: 700; }
+  .md ul { margin: 2px 0 8px; padding-left: 18px; } .md li { margin: 2px 0; }
+  .md table { border-collapse: collapse; margin: 4px 0 8px; font-size: 12.5px; } .md td { border: 1px solid var(--line); padding: 3px 7px; }
+  .md tr:first-child td { font-weight: 700; background: var(--surface-2); }
+  .msg.bot { white-space: normal; }
+  .note-fb { font-size: 11.5px; color: var(--warning); margin-top: 6px; }
+  .typing i:nth-child(2) { animation-delay: .15s; } .typing i:nth-child(3) { animation-delay: .3s; }
+  @keyframes b { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+  .approve { align-self: stretch; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
+  .approve .bar { background: var(--act); color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .6px; padding: 6px 12px;
+                  display: flex; gap: 6px; align-items: center; text-transform: uppercase; }
+  .approve .body { padding: 12px 14px; }
+  .approve .what { font-weight: 650; font-size: 14px; }
+  .approve .why { font-size: 12px; color: var(--muted); margin: 4px 0 12px; }
+  .approve .row { display: flex; gap: 8px; }
+  .btn { border: 0; border-radius: 10px; padding: 9px 14px; font-weight: 650; font-size: 13px; }
+  .btn.yes { background: var(--brand); color: var(--brand-ink); flex: 1; } .btn.no { background: var(--surface-2); border: 1px solid var(--line); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .approve.done .bar { background: var(--muted); }
+  .result { font-size: 13px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+  .result.ok { color: var(--good); } .result.no { color: var(--ink-2); } .result.bad { color: var(--critical); }
+  .sugg { display: flex; gap: 6px; overflow-x: auto; padding: 10px 18px 0; scrollbar-width: none; }
+  .sugg button { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 11px; font-size: 12px; color: var(--ink-2); }
+  .sugg button:hover { border-color: var(--brand); color: var(--brand); }
+  form { display: flex; gap: 8px; padding: 12px 18px 16px; }
+  input[type=text] { flex: 1; min-width: 0; font: inherit; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line);
+                     background: var(--surface-2); color: var(--ink); outline: none; }
+  input[type=text]:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+  .send { border: 0; width: 44px; border-radius: 12px; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; }
+
+  .up { display: inline-flex; align-items: center; gap: 6px; border: 0; background: var(--brand); color: var(--brand-ink);
+        padding: 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 650; white-space: nowrap; }
+  .up:hover { background: var(--brand-2); }
+  .modal { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; background: rgba(5, 12, 9, .45); }
+  .modal[hidden] { display: none; }
+  .sheet { width: min(520px, 100%); background: var(--surface); border-radius: 18px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.25); display: grid; gap: 14px; }
+  .sh-head { display: flex; justify-content: space-between; align-items: center; } .sh-head h3 { margin: 0; font-size: 17px; }
+  .x { border: 0; background: none; padding: 4px; color: var(--muted); }
+  .drop { border: 2px dashed var(--line); border-radius: 14px; padding: 26px 16px; display: grid; justify-items: center; gap: 6px; text-align: center; cursor: pointer; background: var(--surface-2); }
+  .drop:hover, .drop.over { border-color: var(--brand); background: var(--brand-tint); }
+  .drop span { font-size: 12.5px; color: var(--muted); }
+  .pw label { font-size: 13px; } .pw .row { display: flex; gap: 8px; margin-top: 6px; }
+  .pw input { flex: 1; font: inherit; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); }
+  .opt { font-size: 13.5px; font-weight: 600; display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: start; }
+  .opt span { grid-column: 2; font-size: 12px; font-weight: 400; color: var(--muted); }
+  .status { font-size: 13px; min-height: 1em; } .status.err { color: var(--critical); } .status.ok { color: var(--good); }
+  .sample { font-size: 12.5px; color: var(--muted); } .sample a { color: var(--brand); }
+  .link { border: 0; background: none; padding: 0; color: var(--brand); font-weight: 650; text-decoration: underline; font-size: 12.5px; }
+  @media (max-width: 560px) { .up span { display: none; } }
+  .loader { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: color-mix(in srgb, var(--page) 92%, transparent); backdrop-filter: blur(4px); }
+  .loader[hidden] { display: none; }
+  .lbox { text-align: center; max-width: 360px; padding: 24px; }
+  .lt { font-weight: 700; font-size: 16px; margin-top: 14px; }
+  .ls { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .spin { width: 40px; height: 40px; margin: 0 auto; border-radius: 50%; border: 4px solid var(--brand-soft); border-top-color: var(--brand); animation: sp .8s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  @media (max-width: 1180px) { .wrap { grid-template-columns: 1fr; } .chat { position: static; height: 640px; } }
+  @media (max-width: 900px) { .hero { grid-template-columns: 1fr 1fr; } .hero-main { grid-column: 1 / -1; } .grid2 { grid-template-columns: 1fr; }
+                              .shield { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .wrap, .top-in { padding-left: 16px; padding-right: 16px; } .user, .pill.sandbox { display: none; }
+                              .top-in { gap: 10px; } .hero-main .big { font-size: 34px; }
+                              .in { grid-template-columns: 36px 1fr; } .in .do { grid-column: 2; justify-self: start; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></symbol>
+  <symbol id="i-piggy" viewBox="0 0 24 24"><path d="M5 11a7 6 0 0114 0v3l2 1v2h-3l-1 3h-3v-2h-4v2H7l-1-3c-1.5-1-2-2.5-2-4"/><circle cx="15" cy="10" r=".5"/></symbol>
+  <symbol id="i-umbrella" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0118 0z"/><path d="M12 12v7a2 2 0 01-4 0"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6M5 10v8M19 10v8M9 10v8M15 10v8M3 20h18"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4h11l-2 4 2 4H5"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2-7z"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 14h.01M15 14h.01"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a1 1 0 00-1 1v16a1 1 0 001 1h12a1 1 0 001-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+</svg>
+
+<div class="loader" id="loader" hidden>
+  <div class="lbox"><div id="loaderPilo"></div><div class="lt">Starting PocketPilot…</div>
+  <div class="ls">Loading the Python engine into your browser. This takes a few seconds the first time.<br>Your sandbox account runs entirely on this device.</div></div>
+</div>
+<div class="modal" id="upModal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="upTitle">
+    <div class="sh-head"><h3 id="upTitle">Use your own bank statement</h3><button class="x" id="upClose" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <label class="drop" id="drop">
+      <input type="file" id="upFile" accept=".pdf,.csv,.xlsx,.xls,.txt" hidden>
+      <svg class="i" style="width:30px;height:30px;color:var(--brand)"><use href="#i-file"/></svg>
+      <b>Drop your statement here, or click to choose</b>
+      <span>PDF e-statement (text, not scanned), CSV or Excel · up to 50 pages</span>
+    </label>
+    <div class="pw" id="pwRow" hidden>
+      <label for="pw">This PDF is password-protected. Enter its password (used only to open the file on this device):</label>
+      <div class="row"><input type="password" id="pw" autocomplete="off"><button class="btn yes" id="pwGo">Open</button></div>
+    </div>
+    <label class="opt"><input type="checkbox" id="useAi" checked> Use the AI assistant for questions
+      <span>Your file is read in this browser. With AI on, your questions and the figures the assistant looks up are sent
+      to Cloudflare Workers AI (phone, card and account numbers masked). Untick to keep everything on this device.</span></label>
+    <div class="status" id="upStatus"></div>
+    <div class="sample">No statement handy? <button class="link" id="trySample">Try a sample PDF statement</button>
+      · download <a href="sample_statement.pdf" download>PDF</a> / <a href="sample_statement.csv" download>CSV</a></div>
+  </div>
+</div>
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><div class="mark"><svg class="i"><use href="#i-wallet"/></svg></div>PocketPilot</div>
+    <span class="pill ai" id="planner"><span class="dot"></span>AI</span>
+    <span class="pill sandbox"><svg class="i" style="width:14px;height:14px"><use href="#i-lock"/></svg>Sandbox account</span>
+    <div class="grow"></div>
+    <div class="user"><span id="who">Rafi Ahmed · Dhaka</span><div class="avatar" id="avatar">R</div></div>
+    <button class="up" id="openUpload"><svg class="i" style="width:16px;height:16px"><use href="#i-upload"/></svg><span>Upload statement</span></button>
+    <button class="ghost" id="reset" title="Restore the demo account">Reset</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="col">
+    <section class="hero" id="hero"></section>
+
+    <div class="grid2">
+      <section class="card">
+        <div class="head">
+          <div><h3>Income vs spending</h3><div class="sub">Monthly, last 4 months</div></div>
+          <div class="legend"><span><i class="sw"></i>Spent</span><span><i class="sw line"></i>Income</span></div>
+        </div>
+        <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
+        <div class="note" id="chartNote"></div>
+      </section>
+      <section class="card">
+        <div class="head"><div><h3>Where your money goes</h3><div class="sub">3-month average per category, excluding one-off purchases</div></div></div>
+        <div class="cats" id="cats"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="head"><div><h3>What PocketPilot found</h3><div class="sub">Ranked by urgency · every action needs your approval</div></div></div>
+      <div class="ins" id="insights"></div>
+    </section>
+
+    <div class="grid2">
+      <section class="card">
+        <div class="head"><div><h3>Coming up</h3><div class="sub">Recurring bills, next expected date</div></div></div>
+        <div class="bills" id="bills"></div>
+      </section>
+      <section class="card">
+        <div class="head"><div><h3>Protection</h3><div class="sub">Hard limits enforced in code; the AI cannot change them</div></div>
+          <svg class="i" style="color:var(--good);width:22px;height:22px"><use href="#i-shield"/></svg></div>
+        <div class="shield" id="shield"></div>
+        <div class="chain" id="chain"></div>
+        <details><summary>View audit log</summary><div class="audit" id="audit"></div></details>
+      </section>
+    </div>
+  </div>
+
+  <aside class="card chat">
+    <div class="chat-h">
+      <div class="bot-av has-pilo" id="piloSlot"></div>
+      <div><div class="t">Pilo · your PocketPilot assistant</div><div class="s"><span class="dot"></span>Online · read · advise · act with approval</div></div>
+    </div>
+    <div class="log" id="log"></div>
+    <div class="sugg" id="sugg"></div>
+    <form id="form" autocomplete="off">
+      <input type="text" id="input" placeholder="Ask about your money, or ask me to do something…" maxlength="500">
+      <button class="send" type="submit" aria-label="Send"><svg class="i"><use href="#i-send"/></svg></button>
+    </form>
+  </aside>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const tk = (n) => "৳" + Math.round(n).toLocaleString("en-US");
+const cur = (s) => String(s).replace(/BDT /g, "৳").replace(/ -> /g, " → ");
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = cur(text); return e; };
+const icon = (name, style) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("class", "i");
+  if (style) s.setAttribute("style", style); const u = document.createElementNS("http://www.w3.org/2000/svg", "use"); u.setAttribute("href", "#i-" + name); s.append(u); return s; };
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monthName = (ym) => MON[+ym.slice(5, 7) - 1];
+
+const SUGGESTIONS = ["Why am I always broke at month end?", "Compare August and September", "I want a 60k laptop in 2 months. Plan?",
+  "Anything unusual?", "amar taka kothay jacche?", "Send 25000 to 01711000000"];
+
+
+/* Pilo: the PocketPilot mascot. Static, trusted SVG markup (no user data), with mood classes: thinking / happy / alert. */
+const PILO_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true">
+  <ellipse cx="32" cy="61" rx="15" ry="2.4" fill="rgba(0,0,0,.13)"/>
+  <g class="body-g">
+    <line x1="32" y1="14" x2="32" y2="9" stroke="#0b6e50" stroke-width="2.4" stroke-linecap="round"/>
+    <g class="coin"><circle class="coin-face coin-rim" cx="32" cy="6" r="4.4" fill="#f5c542" stroke="#d9a21b" stroke-width="1.3"/>
+      <path d="M30.6 4.3h2.9M31.2 4.3v3.6q0 1 1.1 1" stroke="#b9860f" stroke-width="1" fill="none" stroke-linecap="round"/></g>
+    <rect x="7" y="13" width="50" height="45" rx="20" fill="#16a374"/>
+    <path d="M7 40a20 20 0 0 0 20 18h10a20 20 0 0 0 20-18z" fill="#0f8a61"/>
+    <ellipse cx="21" cy="20" rx="8" ry="3" fill="rgba(255,255,255,.28)"/>
+    <rect x="13.5" y="23" width="37" height="26" rx="13" fill="#effcf6"/>
+    <g class="brows"><path d="M20.5 27.8l6.2 1.8M43.5 27.8l-6.2 1.8" stroke="#10261d" stroke-width="1.9" stroke-linecap="round"/></g>
+    <g class="eyes"><g class="pupils">
+      <circle cx="25" cy="34.5" r="4" fill="#10261d"/><circle cx="39" cy="34.5" r="4" fill="#10261d"/>
+      <circle cx="26.4" cy="33" r="1.3" fill="#fff"/><circle cx="40.4" cy="33" r="1.3" fill="#fff"/></g></g>
+    <ellipse cx="19" cy="41" rx="3.1" ry="1.9" fill="#ff8fa3" opacity=".8"/><ellipse cx="45" cy="41" rx="3.1" ry="1.9" fill="#ff8fa3" opacity=".8"/>
+    <path class="m-smile" d="M28.5 41q3.5 3.4 7 0" stroke="#10261d" stroke-width="2.1" fill="none" stroke-linecap="round"/>
+    <path class="m-grin" d="M27.4 40.2q4.6 6 9.2 0z" fill="#10261d"/>
+    <path class="m-flat" d="M29 42.6h6" stroke="#10261d" stroke-width="2.1" stroke-linecap="round"/>
+    <path d="M7.5 40q-4.5 2.5-3 7.5M56.5 40q4.5 2.5 3 7.5" stroke="#0b6e50" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+  </g></svg>`;
+function pilo(size = 38, mood = "") {
+  const w = el("span", "pilo " + mood);
+  w.style.width = w.style.height = size + "px";
+  w.innerHTML = PILO_SVG;
+  return w;
+}
+let moodTimer = null;
+function mood(state, ms = 2600) {
+  const head = $("piloHead"); if (!head) return;
+  head.className = "pilo " + state;
+  clearTimeout(moodTimer);
+  if (state && ms) moodTimer = setTimeout(() => { head.className = "pilo"; }, ms);
+}
+
+/* Engine: use the local Python server when there is one (python -m pocketpilot.server); otherwise
+   (static hosting, e.g. Cloudflare Pages) run the very same Python package inside the browser with Pyodide. */
+const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
+const PY_FILES = ["__init__", "agent", "analytics", "api", "categorize", "data", "importer", "security", "tools"];
+let engine = null;
+
+async function startEngine() {
+  try {
+    const r = await fetch("/api/dashboard");
+    if (r.ok && (r.headers.get("content-type") || "").includes("json")) return { kind: "server" };
+  } catch (e) { /* no server: fall through to the in-browser engine */ }
+  $("loader").hidden = false;
+  await new Promise((ok, fail) => { const s = document.createElement("script"); s.src = PYODIDE + "pyodide.js"; s.onload = ok; s.onerror = fail; document.head.append(s); });
+  const py = await loadPyodide({ indexURL: PYODIDE });
+  py.FS.mkdirTree("/app/pocketpilot");
+  await Promise.all(PY_FILES.map(async f => py.FS.writeFile(`/app/pocketpilot/${f}.py`, await (await fetch(`py/pocketpilot/${f}.py`)).text())));
+  py.runPython([
+    "import sys, json", "sys.path.insert(0, '/app')", "from pocketpilot.api import App", "_app = App('workers-ai')",
+    "def _handle(method, path, body):", "    code, obj = _app.handle(method, path, json.loads(body) if body else None)",
+    "    return json.dumps(obj, default=str)",
+    "def _chat_begin(message):", "    return json.dumps(_app.chat_begin(message), default=str)",
+    "def _chat_resume(reply):", "    return json.dumps(_app.chat_resume(json.loads(reply)), default=str)"].join("\n"));
+  const handle = py.globals.get("_handle"), begin = py.globals.get("_chat_begin"), resume = py.globals.get("_chat_resume");
+  $("loader").hidden = true;
+  return { kind: "browser", handle: (m, p, b) => JSON.parse(handle(m, p, b ? JSON.stringify(b) : "")),
+           begin: (msg) => JSON.parse(begin(msg)), resume: (reply) => JSON.parse(resume(JSON.stringify(reply))) };
+}
+
+async function api(path, body) {
+  if (engine.kind === "browser") return engine.handle(body ? "POST" : "GET", path, body);
+  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  return r.json();
+}
+
+/* Chat. In the browser build the Python agent runs here and asks us to call the AI model for it: each step returns
+   either a model request (we POST it to the /api/llm edge function) or the final result. */
+async function chat(message) {
+  if (engine.kind !== "browser") return api("/api/chat", { message });
+  let step = engine.begin(message);
+  while (!step.done) {
+    let reply;
+    try {
+      const r = await fetch("/api/llm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(step.llm_request) });
+      reply = (r.headers.get("content-type") || "").includes("json") ? await r.json() : { error: r.status === 404 ? "not_found" : "http_" + r.status };
+    } catch (e) { reply = { error: "network" }; }
+    step = engine.resume(reply);
+  }
+  return step.result;
+}
+
+/* ------------------------------------------------ dashboard */
+function renderHero(d) {
+  const f = d.forecast;
+  const main = el("div", "hero-main");
+  const big = el("div", "big", tk(f.safe_to_spend_per_day)); big.append(el("small", "", " / day"));
+  main.append(el("div", "lbl", "Safe to spend today"), big,
+    el("div", "meta", `${f.days_left} days left · ${tk(f.bills_due_total)} in bills due · ${tk(f.savings_goal_remaining)} still to save`));
+  const tile = (ic, label, value, foot, cls) => { const t = el("div", "tile"); const l = el("div", "lbl"); l.append(icon(ic, "width:15px;height:15px"), label);
+    const v = el("div", "val" + (cls ? " " + cls : ""), value); t.append(l, v, el("div", "foot", foot)); return t; };
+  const m = d.month;
+  $("hero").replaceChildren(main,
+    tile("bank", "Checking", tk(d.balances.checking), `${tk(m.spend)} spent this month`),
+    tile("piggy", "Savings", tk(d.balances.savings), m.moved_to_savings ? `+${tk(m.moved_to_savings)} this month` : "Emergency fund"),
+    tile("trend", "Month-end forecast", tk(f.projected_month_end_balance), `at ${tk(f.avg_daily_flexible_spend)}/day pace`,
+         f.projected_month_end_balance < d.policy.min_checking_balance ? "neg" : ""));
+}
+
+function renderChart(d) {
+  const box = $("chart"), tip = $("tip");
+  const H = 230, W = Math.max(box.clientWidth, 280), padL = 46, padB = 26, padT = 18;
+  const data = d.history, n = data.length;
+  const max = Math.max(...data.map(x => Math.max(x.spend, x.income))) * 1.12;
+  const step = [10000, 20000, 25000, 50000].find(s => max / s <= 6) || 50000;
+  const y = (v) => padT + (H - padT - padB) * (1 - v / max);
+  const slot = (W - padL) / n, bw = Math.min(46, slot * 0.46);
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Monthly spending compared with income");
+  const add = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; svg.append(e); return e; };
+  for (let v = 0; v <= max; v += step) {
+    add("line", { x1: padL, x2: W, y1: y(v), y2: y(v), stroke: v === 0 ? "var(--muted)" : "var(--grid)", "stroke-width": 1 });
+    add("text", { x: padL - 8, y: y(v) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)", class: "num" }, v === 0 ? "0" : (v / 1000) + "k");
+  }
+  data.forEach((x, i) => {
+    const cx = padL + slot * i + slot / 2, top = y(x.spend), base = y(0), partial = i === n - 1;
+    const r = Math.min(4, (base - top) / 2);
+    add("path", { d: `M${cx - bw / 2},${base} V${top + r} q0,-${r} ${r},-${r} H${cx + bw / 2 - r} q${r},0 ${r},${r} V${base} Z`,
+                  fill: "var(--brand)", opacity: partial ? 0.55 : 1 });
+    add("text", { x: cx, y: H - 8, "text-anchor": "middle", "font-size": 12, fill: "var(--ink-2)" }, monthName(x.month) + (partial ? " (so far)" : ""));
+    if (x.spend > x.income) add("text", { x: cx, y: top - 6, "text-anchor": "middle", "font-size": 11, "font-weight": 700, fill: "var(--critical)" }, "▲ " + (x.spend / 1000).toFixed(0) + "k");
+    const hit = add("rect", { x: cx - slot / 2, y: padT, width: slot, height: H - padT - padB, fill: "transparent" });
+    hit.addEventListener("mouseenter", () => {
+      const net = x.income - x.spend;
+      tip.replaceChildren(el("b", "", monthName(x.month) + " " + x.month.slice(0, 4) + (partial ? " (so far)" : "")),
+        el("div", "", `Spent ${tk(x.spend)}`), el("div", "", `Income ${tk(x.income)}`),
+        el("div", "", (net >= 0 ? "Left over " : "Overspent ") + tk(Math.abs(net))));
+      tip.style.left = (cx / W * 100) + "%"; tip.style.top = top + "px"; tip.style.opacity = 1;
+    });
+    hit.addEventListener("mouseleave", () => tip.style.opacity = 0);
+  });
+  const inc = data[0].income;
+  add("line", { x1: padL, x2: W, y1: y(inc), y2: y(inc), stroke: "var(--ink-2)", "stroke-width": 2, "stroke-dasharray": "5 4" });
+  add("text", { x: W, y: y(inc) - 6, "text-anchor": "end", "font-size": 11, fill: "var(--ink-2)", "font-weight": 600 }, "Income " + tk(inc));
+  box.querySelectorAll("svg").forEach(s => s.remove()); box.prepend(svg);
+  const anomaly = d.insights.find(i => i.kind === "anomaly");
+  $("chartNote").textContent = anomaly ? `${monthName(anomaly.title.match(/\d{4}-\d{2}/)[0])} includes a one-off: ${anomaly.title.replace("Unusual spend: ", "")}.` : "";
+}
+
+function renderCats(d) {
+  const rows = d.trends.slice(0, 7);
+  const max = Math.max(...rows.map(t => Math.max(t.avg, d.budgets[t.category] || 0)));
+  $("cats").replaceChildren(...rows.map(t => {
+    const c = el("div", "cat"), nm = el("div", "nm"); nm.append(el("span", "", t.label));
+    if (t.change_pct >= 30) nm.append(el("span", "chg", `▲ ${Math.round(t.change_pct)}%`));
+    const lim = d.budgets[t.category];
+    const amt = el("div", "amt num", tk(t.avg));
+    if (lim !== undefined) { const ln = el("div", "lim-note", `limit ${tk(lim)}`); amt.append(ln); }
+    const tr = el("div", "trk"), f = el("div", "f" + (lim !== undefined && t.avg > lim ? " over" : "")); f.style.width = (100 * t.avg / max) + "%"; tr.append(f);
+    if (lim !== undefined) { const l = el("div", "lim"); l.style.left = `calc(${100 * lim / max}% - 1px)`; l.title = "Your limit: " + tk(lim); tr.append(l); }
+    c.append(nm, amt, tr); return c;
+  }));
+}
+
+const KIND = {
+  duplicate_charge: ["critical", "copy", "Duplicate charge"], anomaly: ["critical", "alert", "Unusual spend"],
+  habit_drift: ["warning", "trend", "Habit drift"], subscriptions: ["serious", "play", "Subscriptions"],
+  savings: ["warning", "piggy", "Savings goal"], resilience: ["ok", "umbrella", "Safety net"],
+};
+function actionPrompt(a, labels) {
+  if (!a) return null; const x = a.args;
+  switch (a.tool) {
+    case "dispute_transaction": return `Dispute ${x.txn_id}`;
+    case "cancel_subscription": return `Cancel ${x.merchant}`;
+    case "set_category_budget": return `Limit ${(labels[x.category] || x.category).toLowerCase()} to ${Math.round(x.monthly_limit)}`;
+    case "move_to_savings": return `Move ${Math.round(x.amount)} to savings`;
+  }
+  return null;
+}
+const ACTION_LABEL = { dispute_transaction: "Dispute", cancel_subscription: "Cancel it", set_category_budget: "Set limit", move_to_savings: "Move to savings" };
+
+function renderInsights(d) {
+  $("insights").replaceChildren(...d.insights.map(i => {
+    const [sev, ic, tag] = KIND[i.kind] || ["ok", "flag", "Insight"];
+    const c = el("div", "in " + sev), ico = el("div", "ic"); ico.append(icon(ic));
+    const body = el("div"); body.append(el("div", "tag" + (sev === "ok" ? " ok" : ""), tag), el("div", "t", i.title), el("div", "d", i.detail));
+    if (i.monthly_impact > 0 && i.kind !== "savings") body.append(el("div", "impact", `Potential: ${tk(i.monthly_impact)}`));
+    c.append(ico, body);
+    const p = actionPrompt(i.action, d.labels);
+    if (p) { const b = el("button", "do", ACTION_LABEL[i.action.tool] || "Do it"); b.onclick = () => send(p); c.append(b); } else c.append(el("div"));
+    return c;
+  }));
+}
+
+function renderBills(d) {
+  $("bills").replaceChildren(...d.upcoming.map(b => {
+    const r = el("div", "bill"), dt = el("div", "date"); const [_, mo, day] = b.next_expected.split("-");
+    dt.append(el("b", "", String(+day)), el("span", "", MON[+mo - 1]));
+    const mid = el("div"); mid.append(el("div", "n", b.merchant), el("div", "c", (d.labels[b.category] || b.category) + (b.times_per_month > 1 ? ` · ${b.times_per_month}× a month` : "")));
+    r.append(dt, mid, el("div", "num", tk(b.amount))); return r;
+  }));
+}
+
+async function renderShield(d) {
+  const p = d.policy;
+  const rule = (k, v) => { const r = el("div", "rule"); r.append(el("div", "k", k), el("div", "v", v)); return r; };
+  $("shield").replaceChildren(rule("Max per transfer", tk(p.max_single_transfer)), rule("Daily cap", tk(p.daily_outgoing_cap)),
+    rule("Always keep", tk(p.min_checking_balance)), rule("Approval expires", (p.confirmation_ttl_seconds / 60) + " min"));
+  const a = await api("/api/audit");
+  const ch = $("chain"); ch.className = "chain " + (a.verified ? "ok" : "bad");
+  ch.replaceChildren(icon(a.verified ? "check" : "x"), a.verified ? `Audit log intact: ${d.audit.entries} entries, hash chain verified`
+                                                          : `Tampering detected at entry ${a.first_bad_entry}`);
+  $("audit").replaceChildren(...a.entries.slice().reverse().map(e => { const r = el("div"); r.append(el("span", "ev", `#${e.seq} ${e.event} `),
+    `${JSON.stringify(e.data)} · ${e.hash.slice(0, 10)}…`); return r; }));
+}
+
+let last = null;
+async function refresh() {
+  const d = await api("/api/dashboard"); last = d;
+  $("planner").replaceChildren(el("span", "dot"), { "claude": "AI: Claude", "workers-ai": "AI: Qwen3 · Cloudflare Workers AI" }[d.planner] || "AI: offline mode");
+  const up = d.source && d.source.kind === "upload";
+  $("who").textContent = up ? d.source.name : "Rafi Ahmed · Dhaka";
+  $("avatar").textContent = up ? "Y" : "R";
+  $("reset").textContent = up ? "Back to demo data" : "Reset";
+  renderHero(d); renderChart(d); renderCats(d); renderInsights(d); renderBills(d); renderShield(d);
+}
+window.addEventListener("resize", () => last && renderChart(last));
+
+/* ------------------------------------------------ chat */
+const log = $("log");
+const scroll = () => log.scrollTop = log.scrollHeight;
+/* Minimal, safe Markdown for bot replies: paragraphs, "- " / "1. " lists, **bold**, simple tables. DOM nodes only, no innerHTML. */
+function inline(parent, text) {
+  String(cur(text)).split(/(\*\*[^*]+\*\*)/g).forEach(part => {
+    if (/^\*\*[^*]+\*\*$/.test(part)) parent.append(el("strong", "", part.slice(2, -2)));
+    else if (part) parent.append(document.createTextNode(part.replace(/`/g, "")));
+  });
+}
+function renderMarkdown(text) {
+  const box = el("div", "md"); let list = null, table = null;
+  for (const raw of String(text).split("\n")) {
+    const line = raw.trim();
+    if (/^\|.*\|$/.test(line)) {
+      if (/^\|[\s:|-]+\|$/.test(line)) continue;
+      if (!table) { table = el("table"); box.append(table); }
+      const tr = el("tr"); line.slice(1, -1).split("|").forEach(c => { const td = el("td"); inline(td, c.trim()); tr.append(td); }); table.append(tr);
+      continue;
+    }
+    table = null;
+    const li = line.match(/^(?:[-*•]|\d+[.)])\s+(.*)$/);
+    if (li) { if (!list) { list = el("ul"); box.append(list); } const item = el("li"); inline(item, li[1]); list.append(item); continue; }
+    list = null;
+    if (!line || /^(-{3,}|\*{3,})$/.test(line)) continue;
+    const p = el("p"); inline(p, line.replace(/^#{1,6}\s*/, "")); if (/^#{1,6}\s/.test(line)) p.className = "h"; box.append(p);
+  }
+  return box;
+}
+function addMsg(text, who, steps, note) {
+  const m = el("div", "msg " + who);
+  if (who === "bot") m.append(renderMarkdown(text)); else m.textContent = text;
+  if (note) m.append(el("div", "note-fb", note));
+  if (steps && steps.length) {
+    const s = el("div", "steps");
+    steps.forEach(st => {
+      const ok = st.status === "ok" || st.status === "awaiting_user_confirmation";
+      s.append(el("span", "chip " + (ok ? st.tier : "err"), `${st.tier.toUpperCase()} · ${st.tool.replace(/_/g, " ")}${ok ? "" : " · refused"}`));
+    });
+    m.append(s);
+  }
+  if (who === "bot") { const row = el("div", "brow"); row.append(pilo(28), m); log.append(row); }
+  else log.append(m);
+  scroll();
+}
+function addApproval(p) {
+  const c = el("div", "approve"), bar = el("div", "bar"); bar.append(icon("lock", "width:13px;height:13px"), "Your approval needed");
+  const body = el("div", "body"), row = el("div", "row");
+  body.append(el("div", "what", p.summary), el("div", "why", "PocketPilot can't do this on its own. Limits are checked again when you approve."));
+  const yes = el("button", "btn yes", "Approve"), no = el("button", "btn no", "Decline");
+  const done = async (approve) => {
+    yes.disabled = no.disabled = true;
+    const r = await api("/api/confirm", { token: p.token, approve });
+    c.classList.add("done");
+    const res = r.status === "executed" ? ["ok", "check", "Done"] : r.status === "declined" ? ["no", "x", "Declined, nothing happened"] : ["bad", "x", r.error || r.status];
+    const out = el("div", "result " + res[0]); out.append(icon(res[1], "width:16px;height:16px"), res[2]); row.replaceWith(out);
+    mood(r.status === "executed" ? "happy" : r.status === "declined" ? "" : "alert");
+    refresh();
+  };
+  yes.onclick = () => done(true); no.onclick = () => done(false);
+  row.append(yes, no); body.append(row); c.append(bar, body); log.append(c); scroll();
+}
+async function send(text) {
+  text = text.trim(); if (!text) return;
+  addMsg(text, "user"); $("input").value = "";
+  const t = el("div", "brow"), dots = el("div", "typing"); dots.append(el("i"), el("i"), el("i"), el("span", "tl", "Pilo is thinking…"));
+  t.append(pilo(28, "thinking"), dots); log.append(t); scroll(); mood("thinking", 0);
+  $("input").disabled = true;
+  const r = await chat(text);
+  t.remove(); $("input").disabled = false; $("input").focus();
+  if (r.error) { mood("alert"); addMsg("Error: " + r.error, "bot"); return; }
+  const fellBack = last && last.planner !== "offline-rules" && r.planner === "offline-rules";
+  addMsg(r.reply, "bot", r.steps, fellBack ? "AI was busy, so this was answered in offline mode." : null);
+  const refused = r.steps.some(st => st.status === "error" || st.status === "blocked") || /^Heads up/.test(r.reply)
+    || /\b(can['’]?t|cannot|can not|won['’]?t|not able to|not allowed|blocked|refuse)\b/i.test(r.reply.slice(0, 160));
+  mood(refused ? "alert" : r.pending.length ? "" : "happy", refused ? 3500 : 1600);
+  r.pending.forEach(addApproval);
+  refresh();
+}
+function greet() {
+  const src = last && last.source;
+  if (src && src.kind === "upload") {
+    addMsg(`I've read **${src.name}**: **${src.transactions} transactions** from ${src.from} to ${src.to}` +
+      (src.warning ? `.\n${src.warning}` : ".") +
+      "\n\nAsk me anything about it, e.g. \"Where does my money go?\" or \"Make me a budget\". Actions stay in a sandbox: nothing touches your real bank." +
+      (src.ai ? "" : "\n\nAI is off for this file, so I'm answering in offline mode and nothing leaves this device."), "bot");
+    return;
+  }
+  addMsg("Hi Rafi 👋 I'm **Pilo**, your PocketPilot assistant. I watch your spending, plan your budget and, with your approval, can move money, pay bills, cancel subscriptions or dispute charges.\n\nThis is a demo account. Use **Upload statement** to try it on your own bank statement.", "bot");
+}
+$("form").onsubmit = (e) => { e.preventDefault(); send($("input").value); };
+$("reset").onclick = async () => { await api("/api/reset", {}); log.replaceChildren(); await refresh(); greet(); };
+
+/* ------------------------------------------------ statement upload (parsed on this device) */
+const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/";
+const XLSX_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+let pendingFile = null;
+const upStatus = (msg, cls = "") => { $("upStatus").className = "status " + cls; $("upStatus").textContent = msg; };
+const loadScript = (src) => new Promise((ok, fail) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = fail; document.head.append(s); });
+
+async function pdfItems(buf, password) {
+  const pdfjs = await import(PDFJS + "pdf.min.mjs");
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+    const src = await (await fetch(PDFJS + "pdf.worker.min.mjs")).text();
+    pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+  }
+  const doc = await pdfjs.getDocument({ data: buf, password: password || undefined, isEvalSupported: false }).promise;
+  const items = [];
+  for (let p = 1; p <= Math.min(doc.numPages, 50); p++) {
+    const tc = await (await doc.getPage(p)).getTextContent();
+    for (const it of tc.items) if (it.str && it.str.trim()) items.push({ page: p, x: it.transform[4], y: it.transform[5], w: it.width, text: it.str });
+  }
+  return items;
+}
+
+async function readStatement(file, password) {
+  const name = file.name.toLowerCase();
+  if (file.size > 15 * 1024 * 1024) throw new Error("That file is over 15 MB. Please upload a shorter statement.");
+  if (/\.(csv|txt)$/.test(name)) return { kind: "csv", data: await file.text() };
+  if (/\.xlsx?$/.test(name)) {
+    if (!window.XLSX) await loadScript(XLSX_URL);
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    return { kind: "csv", data: XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]) };
+  }
+  if (name.endsWith(".pdf")) return { kind: "pdf_items", data: await pdfItems(await file.arrayBuffer(), password) };
+  throw new Error("Please upload a PDF, CSV or Excel file.");
+}
+
+async function importFile(file, password) {
+  pendingFile = file; $("pwRow").hidden = true;
+  upStatus(`Reading ${file.name}…`);
+  let parsed;
+  try { parsed = await readStatement(file, password); }
+  catch (e) {
+    if (e && e.name === "PasswordException") {
+      $("pwRow").hidden = false; $("pw").value = ""; $("pw").focus();
+      return upStatus(e.code === 2 ? "Wrong password, please try again." : "", e.code === 2 ? "err" : "");
+    }
+    return upStatus((e && e.message) || "Couldn't open this file.", "err");
+  }
+  upStatus("Analysing transactions…");
+  const r = await api("/api/statement", { kind: parsed.kind, data: parsed.data, filename: file.name, use_ai: $("useAi").checked });
+  if (r.error) return upStatus(r.error, "err");
+  upStatus("Loaded.", "ok");
+  $("upModal").hidden = true; pendingFile = null;
+  log.replaceChildren(); await refresh(); greet();
+}
+
+$("openUpload").onclick = () => { upStatus(""); $("pwRow").hidden = true; $("upModal").hidden = false; };
+$("upClose").onclick = () => { $("upModal").hidden = true; };
+$("upModal").onclick = (e) => { if (e.target === $("upModal")) $("upModal").hidden = true; };
+$("upFile").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importFile(f); };
+$("pwGo").onclick = () => pendingFile && importFile(pendingFile, $("pw").value);
+$("pw").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("pwGo").click(); } };
+["dragenter", "dragover"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) importFile(f); });
+$("trySample").onclick = async () => {
+  const blob = await (await fetch("sample_statement.pdf")).blob();
+  importFile(new File([blob], "sample_statement.pdf", { type: "application/pdf" }));
+};
+$("sugg").replaceChildren(...SUGGESTIONS.map(s => { const b = el("button", "", s); b.onclick = () => send(s); return b; }));
+$("piloSlot").append(Object.assign(pilo(44), { id: "piloHead" }));
+$("loaderPilo").append(pilo(72, "thinking"));
+(async () => {
+  try { engine = await startEngine(); }
+  catch (e) { $("loader").querySelector(".lt").textContent = "Could not start PocketPilot. Check your internet connection and reload."; return; }
+  await refresh(); greet();
+})();
+</script>
+</body>
+</html>
