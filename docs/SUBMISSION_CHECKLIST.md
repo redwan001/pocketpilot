@@ -5,7 +5,7 @@
 | — | Registration (form + passport bio pages) | `docs/EMAILS.md` §1 | ⏳ | Fill in the form, attach the passports, send **now** |
 | 01 | Technical documentation | `docs/TECHNICAL_DOCUMENTATION.md` | ✅ | Export to PDF |
 | 02 | Presentation deck (≤10 min) | Slides artifact (13 slides with speaker notes) | ✅ | Team details and GitHub link filled in; download PDF/PPTX |
-| 03 | Demo video (≤5 min, optional) | `docs/DEMO_VIDEO_SCRIPT.md` | ⏳ | Record following the script; upload unlisted |
+| 03 | Demo video (≤5 min, optional) | `Desktop\PocketPilot\PocketPilot_demo.mp4` (4:08, 1080p, AI narration + subtitles) | ✅ | Upload unlisted (YouTube/Drive) and put the link in the submission email |
 | 04 | Source code + README + deploy steps + tests | https://github.com/redwan001/pocketpilot | ✅ | Push future changes with `git push` |
 | 05 | Security self-assessment | `docs/SECURITY_SELF_ASSESSMENT.md` | ✅ | Export to PDF |
 | 06 | Execution evidence | `evidence/` + video | ✅ | Nothing (regenerate with `python scripts/run_demo.py` if code changes) |
