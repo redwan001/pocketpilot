@@ -1,7 +1,7 @@
 # PocketPilot: Security Self-Assessment Report
 
-**Scope:** PocketPilot v0.1.0 (agent, tools, security layer, web server), running against a sandbox account with
-synthetic data.
+**Scope:** PocketPilot v0.1.0 (agent, tools, security layer, web server), running against a sandbox account with  
+synthetic data.  
 **Date:** October 2026 · **Team:** PocketPilots
 
 ## 1. Security objectives
@@ -100,6 +100,6 @@ synthetic data.
 ## 6. Test results
 
 ```
-python -m unittest discover -s tests -v   ->   Ran 40 tests ... OK
+python -m unittest discover -s tests -v   ->   Ran 42 tests ... OK
 python scripts/run_demo.py                ->   4 executed, 3 refused or blocked, 54 audit entries, chain verified = True
 ```

@@ -1,7 +1,7 @@
 # PocketPilot: Technical Documentation
 
-**Competition:** 2026 Shenzhen International FinTech Competition (FinTechathon), International Track
-**Theme:** AI as a Financial Participant · **Topic A:** Personal Finance Assistant
+**Competition:** 2026 Shenzhen International FinTech Competition (FinTechathon), International Track  
+**Theme:** AI as a Financial Participant · **Topic A:** Personal Finance Assistant  
 **Team:** Team PocketPilots · Redoun Islam (BSc, University of the People) · Md Akif Quader (PhD, Mechanical Engineering, The University of Memphis)
 
 ---
@@ -27,13 +27,13 @@ Design goals map directly to the scoring rubric:
 ## 2. System architecture
 
 ```
-          ┌──────────────────────── Web UI (web/index.html) / CLI ─────────────────────────┐
-          │  dashboard · chat · APPROVAL CARDS (Approve / Decline) · audit-log viewer      │
+          ┌────── Web UI (web/index.html) · runs the agent in the browser (Pyodide) ──────┐
+          │  dashboard · chat · APPROVAL CARDS (Approve / Decline) · audit-log viewer     │
           └───────────────┬───────────────────────────────────────────▲───────────────────┘
                  /api/chat│                              /api/confirm │ (token from UI only)
           ┌───────────────▼───────────────────────────────────────────┴───────────────────┐
           │ Agent (agent.py)                                                              │
-          │   Planner = ClaudePlanner (Anthropic tool use)  |  RulePlanner (offline)      │
+          │   Planner = Qwen3 on Workers AI (via /api/llm) | Claude | RulePlanner offline │
           └───────────────┬───────────────────────────────────────────────────────────────┘
                           │ tool calls (name + JSON args)
           ┌───────────────▼───────────────────────────────────────────────────────────────┐
@@ -66,7 +66,10 @@ deterministic analytics engine, and every side effect passes through the same ga
 | `analytics.py` | Monthly summaries, 3-month trends, recurring-bill detection, duplicate and anomaly detection, budget planner, month-end forecast, affordability, ranked insights |
 | `security.py` | `Tier`, `PolicyEngine`, `ConfirmationManager`, `RateLimiter`, `scan_untrusted` / `sanitize_untrusted`, `redact`, `AuditLog` |
 | `tools.py` | 17 tools with JSON schemas, tier tags, run functions and, for ACT, policy pre-checks |
-| `agent.py` | Session orchestration; `ClaudePlanner` (manual tool-use loop on the Anthropic Messages API) and `RulePlanner` (deterministic offline intent router) |
+| `agent.py` | Session orchestration; `OpenModelPlanner` (Qwen3 on Cloudflare Workers AI, the live default), `ClaudePlanner` (Anthropic Messages API, optional) and `RulePlanner` (deterministic offline fallback) |
+| `api.py` | Transport-independent JSON API shared by the local server and the in-browser build |
+| `importer.py` | Statement import: CSV/Excel and text PDFs, bank and credit-card layouts |
+| `functions/api/llm.js` | Cloudflare Pages Function: hardened gateway to Workers AI (no API key in the browser) |
 | `server.py` / `cli.py` | Standard-library HTTP server (localhost only, body-size limit, CSP header) and terminal client |
 
 ### 2.2 Tool catalogue
@@ -75,13 +78,15 @@ deterministic analytics engine, and every side effect passes through the same ga
 |---|---|---|
 | READ | `get_balances` | Checking and savings balances |
 | READ | `list_transactions` | Filtered history; memos returned as `memo_untrusted` after screening |
-| READ | `spending_summary` | Month income, spend, savings rate, category breakdown and 3-month trends |
+| READ | `spending_summary` | Month income, spend, savings rate, category breakdown, share of spend and 3-month trends |
+| READ | `compare_months` | Two months side by side with exact per-category changes |
 | READ | `find_recurring_bills` | Recurring bills and subscriptions with next expected date |
 | READ | `find_unusual_activity` | Duplicates, anomalies, suspicious memos |
 | ADVISE | `get_budget_plan` | Category budgets for a chosen savings % |
 | ADVISE | `forecast_month_end` | Projected balance, bills due, safe-to-spend per day |
 | ADVISE | `get_insights` | Ranked insights, each with a ready-to-run suggested action |
 | ADVISE | `check_affordability` | yes / tight / no for a purchase |
+| ADVISE | `plan_savings_goal` | Exact plan for a goal (amount, months): monthly target, wants to trim, feasibility |
 | ACT | `set_category_budget` | Set a monthly category limit |
 | ACT | `move_to_savings` | Checking → savings (own account) |
 | ACT | `cancel_subscription` | Request cancellation of a detected subscription |
@@ -110,6 +115,7 @@ The app opens on a synthetic demo account. Users can switch to their own data wi
 |---|---|
 | CSV | The header row is found automatically, even below account-info rows. Columns are matched by name: Date/Txn Date; Description/Narration/Particulars; Debit/Withdrawal and Credit/Deposit, or Amount with Dr/Cr. Date order (dd/mm vs mm/dd) is detected. |
 | Excel (.xlsx/.xls) | SheetJS converts the first sheet to CSV. |
+| Credit-card PDF | Detected from card wording (credit limit, minimum payment). Dates without a year take it from the statement period; a single Amount column is read with card signs (purchases are spending, card payments are excluded as transfers); currency (e.g. USD) is detected and used for amounts, thresholds and limits. The dashboard shows spending totals instead of a checking balance. |
 | PDF e-statement | pdf.js extracts positioned text. `importer.parse_pdf_items` rebuilds the lines, finds the Debit/Credit/Balance header and assigns each amount to the nearest column. Without a header, it uses the change in running balance, Dr/Cr markers, or keywords. It joins wrapped narration lines and skips opening/closing-balance rows. It supports password-protected PDFs and detects scanned PDFs (no text) with a clear message. |
 
 Narrations are categorised with whole-word rules for Bangladeshi banking terms (ATM, BEFTN/NPSB/RTGS, POS, VAT and
@@ -253,8 +259,13 @@ See `SECURITY_SELF_ASSESSMENT.md` for the full threat model and risk list.
 
 ## 6. Evaluation and execution evidence
 
-- **27 automated tests** (`python -m unittest discover -s tests -v`) cover analytics correctness, every security
-  primitive and end-to-end agent flows.
+- **42 automated tests** (`python -m unittest discover -s tests -v`) cover analytics correctness, every security
+  primitive, end-to-end agent flows, the AI tool loop with a scripted fake model, and statement import (bank PDF/CSV,
+  PDF without headers, credit-card PDF, invalid files).
+- **Live AI evaluation** (`scripts/eval_models.py`, `evidence/model_eval.md`): 8 realistic questions answered by the
+  deployed Qwen3 planner, with the tools each answer used.
+- **Statement import:** the sample 2-page bank PDF yields 68/68 transactions with the exact closing balance.
+- **Demo video** (4:08) recorded automatically against the live site, with checks that every approval completes.
 - **Scripted sandbox session** (`python scripts/run_demo.py`) runs 15 user turns. Results:
   - 4 approved actions executed: a dispute, a cancellation, a budget limit, and a BDT 10,000 transfer to savings.
   - 1 action declined by the user, so nothing happened.
@@ -265,10 +276,15 @@ See `SECURITY_SELF_ASSESSMENT.md` for the full threat model and risk list.
 
 ## 7. Deployment
 
-Python 3.10+ with no third-party packages for the core.
+**Live:** https://pocketpilot-7jr.pages.dev on Cloudflare Pages. It's a static site, with the Python package running
+in the browser through Pyodide, plus one Pages Function bound to Workers AI. Rebuild and deploy with
+`python scripts/build_site.py`, then `npx wrangler pages deploy site --project-name pocketpilot`.
+
+**Local:** Python 3.10+ with no third-party packages for the core.
 
 1. Run `python -m pocketpilot.server --offline` and open `http://127.0.0.1:8000`.
-2. For the Claude planner, run `pip install anthropic`, set `ANTHROPIC_API_KEY`, then run `python -m pocketpilot.server`.
+2. To use the live AI from the local server, set `POCKETPILOT_LLM_URL=https://pocketpilot-7jr.pages.dev/api/llm`.
+   For Claude instead, run `pip install anthropic` and set `ANTHROPIC_API_KEY`.
 
 In production, the sandbox state would be replaced by a bank or wallet API adapter behind the same `Toolbox`
 interface; the security layer is unchanged.
@@ -277,6 +293,9 @@ interface; the security layer is unchanged.
 
 - Categorisation is rule-based. Next step: let the LLM categorise unknown merchants, with user correction.
 - The sandbox is in-memory. Next step: persistent storage and open-banking or mobile-wallet connectors.
-- Bangla replies are available with the Claude planner. The offline planner is English-only; next step: Bangla intent
-  aliases.
+- The open model (Qwen3) can still phrase things imperfectly, for example a wrong Bangla word. Numbers come from tools.
+  Next step: automatically check that every number in a reply appears in a tool result.
+- The free Workers AI quota allows roughly 100 chats a day; beyond that the offline planner answers.
+- Statement layouts vary by bank. Tested on bank-style and credit-card-style PDFs; more layouts can be added to the
+  importer.
 - Future work: savings goals with automation rules, shared family budgets, and SMS or e-statement ingestion.
