@@ -285,7 +285,7 @@ See `SECURITY_SELF_ASSESSMENT.md` for the full threat model and risk list.
 
 ## 6. Evaluation and execution evidence
 
-- **48 automated tests** (`python -m unittest discover -s tests -v`) cover analytics correctness, every security
+- **49 automated tests** (`python -m unittest discover -s tests -v`) cover analytics correctness, every security
   primitive, end-to-end agent flows, the AI tool loop with a scripted fake model, and statement import (bank PDF/CSV,
   PDF without headers, credit-card PDF, invalid files).
 - **Live AI evaluation** (`scripts/eval_models.py`, `evidence/model_eval.md`): 8 realistic questions answered by the

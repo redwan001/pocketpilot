@@ -70,7 +70,7 @@ Other entry points:
 ```bash
 python -m pocketpilot.cli --offline           # chat in the terminal
 python scripts/run_demo.py                    # regenerate the execution evidence in evidence/
-python -m unittest discover -s tests -v       # run the 48 tests
+python -m unittest discover -s tests -v       # run the 49 tests
 ```
 
 ### Rebuild and deploy the browser demo (Cloudflare Pages)
@@ -111,7 +111,7 @@ pocketpilot/
   server.py      standard-library web server
   cli.py         terminal chat
 web/index.html   dashboard + chat + approval cards + audit viewer
-tests/           48 unit and integration tests (incl. a scripted fake model)
+tests/           49 unit and integration tests (incl. a scripted fake model)
 functions/api/llm.js  Cloudflare Pages Function: hardened gateway to Workers AI
 scripts/run_demo.py    scripted session -> evidence/
 scripts/make_samples.py  sample statements (PDF + CSV) for trying the upload

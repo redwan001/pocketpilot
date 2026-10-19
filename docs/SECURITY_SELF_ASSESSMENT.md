@@ -102,6 +102,6 @@ synthetic data.
 ## 6. Test results
 
 ```
-python -m unittest discover -s tests -v   ->   Ran 48 tests ... OK
+python -m unittest discover -s tests -v   ->   Ran 49 tests ... OK
 python scripts/run_demo.py                ->   4 executed, 3 refused or blocked, 54 audit entries, chain verified = True
 ```

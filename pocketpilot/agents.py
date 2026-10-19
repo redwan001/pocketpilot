@@ -74,9 +74,25 @@ def grounded(value: float, is_pct: bool, evidence: list[float]) -> bool:
     return False
 
 
-def verify(reply: str, evidence: list[float]) -> dict:
+def derived(value: float, is_pct: bool, turn: list[float]) -> bool:
+    """Exact arithmetic on figures from THIS turn's tool results: a + b, a - b, or a / b as a percentage.
+    Tolerances are tight, so a made-up number rarely matches by chance."""
+    v = abs(value)
+    nums = sorted({round(x, 2) for x in turn if x > 0})[:400]
+    for i, a in enumerate(nums):
+        for b in nums[i:]:
+            if is_pct:
+                if abs(v - 100 * a / b) <= 0.06 or (a and abs(v - 100 * b / a) <= 0.06):
+                    return True
+            elif v >= 100 and (abs(v - (a + b)) <= 0.5 or abs(v - (b - a)) <= 0.5):
+                return True
+    return False
+
+
+def verify(reply: str, evidence: list[float], turn: list[float] | None = None) -> dict:
     figs = extract_figures(reply)
-    bad = [raw for raw, v, pct in figs if not grounded(v, pct, evidence)]
+    bad = [raw for raw, v, pct in figs
+           if not grounded(v, pct, evidence) and not (turn and derived(v, pct, turn))]
     return {"checked": len(figs), "unsupported": list(dict.fromkeys(bad))}
 
 

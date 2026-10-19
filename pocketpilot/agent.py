@@ -493,7 +493,7 @@ class Agent:
         self.audit.append("user_message", text=redact(message)[:300], injection_flags=flags["matches"])
 
         requested: dict[str, dict] = {}
-        turn = {"untrusted": False}
+        turn = {"untrusted": False, "results": []}
         self.evidence.append(message)
         prev_user, self._last_user = self._last_user, message
 
@@ -531,6 +531,7 @@ class Agent:
             if "memo withheld" in json.dumps(r, default=str):
                 turn["untrusted"] = True               # injected instructions were seen in data this turn
             self.evidence.append(r)
+            turn["results"].append(r)
             steps.append({"tool": name, "tier": tier, "args": args, "status": r["status"]})
             return r
 
@@ -550,13 +551,14 @@ class Agent:
         # Verifier: every figure in the reply must be grounded in a tool result or the user's own words.
         self.evidence = self.evidence[-80:]
         evidence = agents.evidence_from(self.evidence)
-        check = agents.verify(reply, evidence)
+        turn_nums = agents.evidence_from(turn["results"])
+        check = agents.verify(reply, evidence, turn_nums)
         revised = False
         if check["unsupported"] and used == self.planner.name and hasattr(self.planner, "revise"):
             try:
                 reply = yield from self.planner.revise(check["unsupported"])
                 revised = True
-                check = agents.verify(reply, agents.evidence_from(self.evidence))
+                check = agents.verify(reply, agents.evidence_from(self.evidence), agents.evidence_from(turn["results"]))
             except Exception as e:
                 self.audit.append("planner_error", error=type(e).__name__, detail="during fact-check revision")
         if check["unsupported"]:

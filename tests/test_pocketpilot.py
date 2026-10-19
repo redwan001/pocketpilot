@@ -267,6 +267,14 @@ class TestOpenModelPlanner(unittest.TestCase):
         r = Agent(mode="workers-ai", llm_transport=fake).chat("How much did I spend in September?")
         self.assertEqual(r["verification"], {"checked": 1, "unsupported": [], "revised": False})
 
+    def test_verifier_accepts_correct_arithmetic_on_this_turns_data(self):
+        from pocketpilot import agents
+        turn = [47533.0, 65500.0, 18000.0, 8000.0]
+        r = agents.verify("You spent 72.6% of income; rent + family = BDT 26,000.", [], turn)
+        self.assertEqual(r["unsupported"], [])
+        r = agents.verify("You spent 81.4% of income and BDT 31,337 on rent.", [], turn)
+        self.assertEqual(r["unsupported"], ["81.4%", "BDT 31,337"])
+
     def test_verifier_makes_model_fix_an_invented_number(self):
         fake = FakeModel([
             {"content": "", "tool_calls": [{"id": "a", "name": "spending_summary", "arguments": {"month": "2026-09"}}]},
