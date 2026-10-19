@@ -16,6 +16,8 @@ Here's what I'd look at first:
 5. Savings rate is 3% (target 20%). Excluding one-off purchases, last 3 months: 2026-07 9%, 2026-08 4%, 2026-09 -3%. You can safely move BDT 13,000 to savings now.
 I can act on any of these, e.g. "dispute the duplicate", "cancel Netflix", "move savings", or "limit food delivery to 4000". Nothing happens without your approval.
 
+⚠ Not verified against your data: 4000
+
 Tool trace: `ADVISE:get_insights` -> ok
 
 _Balances: checking BDT 45,976, savings BDT 120,000_
@@ -40,7 +42,7 @@ _Balances: checking BDT 45,976, savings BDT 120,000_
 I found a duplicate: Netflix charged BDT 1,100 twice within 3 days (T0184, 2026-10-12).
 Ready: Open a dispute for Netflix BDT 1,100 on 2026-10-12 (duplicate charge). Please approve or decline it below. Nothing has happened yet.
 
-Tool trace: `READ:find_unusual_activity` -> ok, `ACT:dispute_transaction` -> awaiting_user_confirmation
+Tool trace: `READ:find_unusual_activity` -> ok, `GUARD:guardian_review` -> low risk, `ACT:dispute_transaction` -> awaiting_user_confirmation
 
 > Approval card: **Open a dispute for Netflix BDT 1,100 on 2026-10-12 (duplicate charge).** -> user APPROVED -> `executed`
 
@@ -72,7 +74,7 @@ _Balances: checking BDT 45,976, savings BDT 120,000_
 
 Ready: Cancel the Netflix subscription (saves BDT 1,100/month). Please approve or decline it below. Nothing has happened yet.
 
-Tool trace: `READ:find_recurring_bills` -> ok, `ACT:cancel_subscription` -> awaiting_user_confirmation
+Tool trace: `READ:find_recurring_bills` -> ok, `GUARD:guardian_review` -> low risk, `ACT:cancel_subscription` -> awaiting_user_confirmation
 
 > Approval card: **Cancel the Netflix subscription (saves BDT 1,100/month).** -> user APPROVED -> `executed`
 
@@ -107,7 +109,7 @@ _Balances: checking BDT 45,976, savings BDT 120,000_
 
 Ready: Set a monthly budget of BDT 4,000 for Food delivery. Please approve or decline it below. Nothing has happened yet.
 
-Tool trace: `ACT:set_category_budget` -> awaiting_user_confirmation
+Tool trace: `GUARD:guardian_review` -> low risk, `ACT:set_category_budget` -> awaiting_user_confirmation
 
 > Approval card: **Set a monthly budget of BDT 4,000 for Food delivery.** -> user APPROVED -> `executed`
 
@@ -132,7 +134,7 @@ _Balances: checking BDT 45,976, savings BDT 120,000_
 
 Ready: Move BDT 10,000 from checking to savings. Please approve or decline it below. Nothing has happened yet.
 
-Tool trace: `ACT:move_to_savings` -> awaiting_user_confirmation
+Tool trace: `GUARD:guardian_review` -> low risk, `ACT:move_to_savings` -> awaiting_user_confirmation
 
 > Approval card: **Move BDT 10,000 from checking to savings.** -> user APPROVED -> `executed`
 
@@ -154,7 +156,7 @@ _Balances: checking BDT 35,976, savings BDT 130,000_
 
 Ready: Pay BDT 1,000 to Link3 Internet (Cust ****2210). Please approve or decline it below. Nothing has happened yet.
 
-Tool trace: `READ:find_recurring_bills` -> ok, `ACT:pay_bill` -> awaiting_user_confirmation
+Tool trace: `READ:find_recurring_bills` -> ok, `GUARD:guardian_review` -> low risk, `ACT:pay_bill` -> awaiting_user_confirmation
 
 > Approval card: **Pay BDT 1,000 to Link3 Internet (Cust ****2210).** -> user DECLINED -> `declined`
 
@@ -204,4 +206,4 @@ _Balances: checking BDT 35,976, savings BDT 130,000_
 
 ## Integrity check
 
-Audit log entries: 54. Hash chain verified: **True**.
+Audit log entries: 74. Hash chain verified: **True**.
