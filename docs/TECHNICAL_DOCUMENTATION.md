@@ -296,7 +296,7 @@ See `SECURITY_SELF_ASSESSMENT.md` for the full threat model and risk list.
   - 4 approved actions executed: a dispute, a cancellation, a budget limit, and a BDT 10,000 transfer to savings.
   - 1 action declined by the user, so nothing happened.
   - 3 attacks or violations refused: an unknown recipient, a transfer over the limit, and an injection-style command.
-  - 54 audit entries, with the hash chain verified.
+  - 74 audit entries (including Guardian and Verifier checks), with the hash chain verified.
 
   Outputs: `evidence/operation_log.jsonl`, `evidence/demo_transcript.md`, `evidence/summary.json`.
 
