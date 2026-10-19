@@ -219,6 +219,32 @@ The planner also:
 - strips stray tokens and internal tool names from replies;
 - merges duplicate action requests.
 
+### 4.1 Multi-agent design: Planner, Guardian and Verifier
+
+PocketPilot separates duties across agents, so that no single model is trusted with money or with facts:
+
+| Agent | Job | What it sees | Can it act? |
+|---|---|---|---|
+| **Pilo (planner)** | Understands the request, calls tools, writes the answer | Conversation and masked tool results | Only *requests* actions |
+| **Guardian (risk reviewer)** | Reviews every money action **after** the hard policy limits pass, **before** the user sees an approval card | Only the user's own words, the previous assistant message and the proposed action, **never transaction data** (where injected text lives) | Can **block**; cannot approve |
+| **Verifier (fact checker)** | Checks every figure in each reply against tool results and the user's own words | Reply, tool results | Can force **one** self-correction; marks anything still unsupported |
+| Policy engine (code) | Hard limits, re-checked on approval | Account state | Enforces |
+
+**Guardian decision.** Deterministic rules give *asked* (do the user's words ask for this kind of action, including a
+"yes" to a suggestion) and risk signals: amount versus checking balance, an amount different from the one typed,
+instruction-like text seen in data this turn, and a first transfer to a payee. An independent model call, with a separate
+system prompt and no tools, returns `{matches_request, risk, reason}`. The model can raise a warning, but it can only
+block by judging that the user did not ask for the action. Rules alone can block on hard signals, for example an action
+the user never asked for, or more than 80% of the balance. Offline, the rules run alone. The review appears on the
+approval card and in the audit log; a blocked action's approval token is cancelled before it reaches the user.
+
+**Verifier (hallucination control).** Amounts, percentages and other figures above 31 are extracted from the reply.
+Dates, transaction IDs, small counts and years are ignored. Each figure must match a number in this session's tool
+results or the user's message, within normal rounding. If any figure is unsupported, the planner gets a "fact check"
+message naming the figures and rewrites the answer once. Anything still unsupported is appended as "Not verified
+against your data". Each answer shows a badge such as "✓ Verifier: 10 figures checked against your data". Tests cover
+grounded answers, a corrected hallucination, an uncorrectable one, a blocked unrequested action and offline review.
+
 ### 4.0 Original planner notes
 
 ### 4.1 Claude planner
@@ -259,7 +285,7 @@ See `SECURITY_SELF_ASSESSMENT.md` for the full threat model and risk list.
 
 ## 6. Evaluation and execution evidence
 
-- **42 automated tests** (`python -m unittest discover -s tests -v`) cover analytics correctness, every security
+- **48 automated tests** (`python -m unittest discover -s tests -v`) cover analytics correctness, every security
   primitive, end-to-end agent flows, the AI tool loop with a scripted fake model, and statement import (bank PDF/CSV,
   PDF without headers, credit-card PDF, invalid files).
 - **Live AI evaluation** (`scripts/eval_models.py`, `evidence/model_eval.md`): 8 realistic questions answered by the

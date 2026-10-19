@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "site"
-MODULES = ["__init__", "agent", "analytics", "api", "categorize", "data", "importer", "security", "tools"]
+MODULES = ["__init__", "agent", "agents", "analytics", "api", "categorize", "data", "importer", "security", "tools"]
 
 HEADERS = """/*
   X-Content-Type-Options: nosniff

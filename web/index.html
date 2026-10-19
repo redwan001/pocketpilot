@@ -181,6 +181,12 @@
   .chip.advise { background: color-mix(in srgb, var(--advise) 14%, transparent); color: var(--advise); }
   .chip.act { background: color-mix(in srgb, var(--act) 16%, transparent); color: var(--act); }
   .chip.err { background: var(--critical-soft); color: var(--critical); }
+  .chip.guard { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good); }
+  .verify { font-size: 11.5px; font-weight: 600; margin-top: 6px; }
+  .verify.ok { color: var(--good); } .verify.warn { color: var(--warning); }
+  .gv { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; margin: 0 0 12px; padding: 8px 10px; border-radius: 9px; }
+  .gv.low { background: color-mix(in srgb, var(--good) 10%, transparent); color: var(--good); }
+  .gv.medium { background: var(--warning-soft); color: var(--warning); }
   .typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
   .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: b 1s infinite; }
   .typing .tl { font-size: 12px; color: var(--muted); margin-left: 6px; animation: none; width: auto; height: auto; background: none; }
@@ -416,7 +422,7 @@ function mood(state, ms = 2600) {
 /* Engine: use the local Python server when there is one (python -m pocketpilot.server); otherwise
    (static hosting, e.g. Cloudflare Pages) run the very same Python package inside the browser with Pyodide. */
 const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
-const PY_FILES = ["__init__", "agent", "analytics", "api", "categorize", "data", "importer", "security", "tools"];
+const PY_FILES = ["__init__", "agent", "agents", "analytics", "api", "categorize", "data", "importer", "security", "tools"];
 let engine = null;
 
 async function startEngine() {
@@ -642,17 +648,28 @@ function renderMarkdown(text) {
   }
   return box;
 }
-function addMsg(text, who, steps, note) {
+function addMsg(text, who, steps, note, verification) {
   const m = el("div", "msg " + who);
   if (who === "bot") m.append(renderMarkdown(text)); else m.textContent = text;
   if (note) m.append(el("div", "note-fb", note));
   if (steps && steps.length) {
     const s = el("div", "steps");
     steps.forEach(st => {
+      if (st.tier === "guard") {             // the Guardian agent's review of a money action
+        const bad = st.status === "blocked";
+        s.append(el("span", "chip " + (bad ? "err" : "guard"), `GUARDIAN · ${bad ? "blocked" : st.status}`));
+        return;
+      }
       const ok = st.status === "ok" || st.status === "awaiting_user_confirmation";
       s.append(el("span", "chip " + (ok ? st.tier : "err"), `${st.tier.toUpperCase()} · ${st.tool.replace(/_/g, " ")}${ok ? "" : " · refused"}`));
     });
     m.append(s);
+  }
+  if (verification && verification.checked) {  // the Verifier agent's fact check
+    const n = verification.checked, bad = verification.unsupported.length;
+    m.append(el("div", "verify " + (bad ? "warn" : "ok"),
+      bad ? `⚠ Verifier: ${bad} of ${n} figures couldn't be matched to your data`
+          : `✓ Verifier: ${n} figure${n > 1 ? "s" : ""} checked against your data${verification.revised ? " (corrected once)" : ""}`));
   }
   if (who === "bot") { const row = el("div", "brow"); row.append(pilo(28), m); log.append(row); }
   else log.append(m);
@@ -662,6 +679,12 @@ function addApproval(p) {
   const c = el("div", "approve"), bar = el("div", "bar"); bar.append(icon("lock", "width:13px;height:13px"), "Your approval needed");
   const body = el("div", "body"), row = el("div", "row");
   body.append(el("div", "what", p.summary), el("div", "why", "PocketPilot can't do this on its own. Limits are checked again when you approve."));
+  if (p.review) {                              // the Guardian's independent risk review
+    const g = el("div", "gv " + p.review.level);
+    g.append(icon("shield", "width:14px;height:14px"),
+      el("span", "", `Guardian: ${p.review.level} risk · ${p.review.reason}`));
+    body.append(g);
+  }
   const yes = el("button", "btn yes", "Approve"), no = el("button", "btn no", "Decline");
   const done = async (approve) => {
     yes.disabled = no.disabled = true;
@@ -685,7 +708,7 @@ async function send(text) {
   t.remove(); $("input").disabled = false; $("input").focus();
   if (r.error) { mood("alert"); addMsg("Error: " + r.error, "bot"); return; }
   const fellBack = last && last.planner !== "offline-rules" && r.planner === "offline-rules";
-  addMsg(r.reply, "bot", r.steps, fellBack ? "AI was busy, so this was answered in offline mode." : null);
+  addMsg(r.reply, "bot", r.steps, fellBack ? "AI was busy, so this was answered in offline mode." : null, r.verification);
   const refused = r.steps.some(st => st.status === "error" || st.status === "blocked") || /^Heads up/.test(r.reply)
     || /\b(can['’]?t|cannot|can not|won['’]?t|not able to|not allowed|blocked|refuse)\b/i.test(r.reply.slice(0, 160));
   mood(refused ? "alert" : r.pending.length ? "" : "happy", refused ? 3500 : 1600);

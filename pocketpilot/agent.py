@@ -13,6 +13,7 @@ import re
 from datetime import date
 from pathlib import Path
 
+from . import agents
 from . import analytics as an
 from .analytics import money
 from .categorize import LABELS, NEEDS
@@ -351,19 +352,38 @@ class OpenModelPlanner:
         text = cls.TOOL_NAMES.sub(lambda m: m.group(1).replace("_", " "), text)
         return text.strip()
 
+    tier_of = staticmethod(lambda name: "")             # set by the Agent: tool name -> "read" | "advise" | "act"
+
+    def _last_assistant_text(self) -> str:
+        return next((m.get("content") or "" for m in reversed(self.history) if m["role"] == "assistant"), "")
+
     def run(self, message: str, call):
         if self.disabled:
             raise LLMUnavailable("disabled after earlier failure")
+        self._call, self._message = call, message
+        self._prev_assistant = self._last_assistant_text()
         start = len(self.history)
         lang = "Bangla" if self.wants_bangla(message) else "English"
         self.history.append({"role": "user", "content": f"{message}\n\n[Reply in {lang}.]"})
+        try:
+            return (yield from self._loop())
+        except LLMUnavailable:
+            del self.history[start:]                    # drop this unfinished turn
+            raise
+
+    def revise(self, unsupported: list[str]):
+        """Verifier feedback: one chance to rewrite an answer whose figures aren't grounded in tool results."""
+        self.history.append({"role": "user", "content": agents.FACT_CHECK.format(bad=", ".join(unsupported))})
+        return (yield from self._loop())
+
+    def _loop(self):
+        call = self._call
         for _ in range(self.MAX_STEPS):
             req = {"model": self.model, "messages": [{"role": "system", "content": self.system}] + self._trimmed(),
                    "tools": self.tools}
             resp = yield req
             if not isinstance(resp, dict) or resp.get("error"):
                 self.disabled = bool(resp and resp.get("error") in {"no_ai_binding", "not_found"})
-                del self.history[start:]            # drop this unfinished turn
                 raise LLMUnavailable(str(resp.get("error") if isinstance(resp, dict) else resp))
             text = self.clean(resp.get("content") or "")
             calls = resp.get("tool_calls") or []
@@ -384,7 +404,12 @@ class OpenModelPlanner:
                 {"id": n["id"], "type": "function",
                  "function": {"name": n["name"], "arguments": json.dumps(n["args"])}} for n in norm]})
             for n in norm:
-                r = call(n["name"], n["args"])
+                verdict = None
+                if self.tier_of(n["name"]) == "act":     # Guardian: independent review before any money action
+                    summary = f"{n['name'].replace('_', ' ')} with {json.dumps(n['args'])}"
+                    verdict = agents.parse_verdict(
+                        (yield agents.guardian_request(self._message, self._prev_assistant, summary)))
+                r = call(n["name"], n["args"], verdict)
                 self.history.append({"role": "tool", "tool_call_id": n["id"], "name": n["name"],
                                      "content": json.dumps(r, default=str)[:6000]})
         return "That needed too many steps. Could you ask in a simpler way?"
@@ -429,7 +454,10 @@ class Agent:
         url = os.environ.get("POCKETPILOT_LLM_URL")
         self.llm_transport = llm_transport or (http_llm_transport(url) if url else None)
         self.planner = self._pick_planner(mode)
+        self.planner.tier_of = lambda name: self.toolbox.tools[name].tier.value if name in self.toolbox.tools else ""
         self.fallback = RulePlanner(today)
+        self.evidence: list = []                   # tool results and user messages the Verifier checks against
+        self._last_user = ""
         self.audit.append("session_start", planner=self.planner.name, today=today.isoformat())
 
     def _pick_planner(self, mode: str):
@@ -465,19 +493,45 @@ class Agent:
         self.audit.append("user_message", text=redact(message)[:300], injection_flags=flags["matches"])
 
         requested: dict[str, dict] = {}
+        turn = {"untrusted": False}
+        self.evidence.append(message)
+        prev_user, self._last_user = self._last_user, message
 
-        def call(name: str, args: dict) -> dict:
+        def call(name: str, args: dict, verdict: dict | None = None) -> dict:
             key = name + json.dumps(args, sort_keys=True, default=str)
             if key in requested:                     # model repeated the same action: don't issue a second approval
                 return requested[key]
+            tier = self.toolbox.tools[name].tier.value if name in self.toolbox.tools else "?"
+            # Validation and hard policy limits run first; the Guardian reviews only actions that pass them.
             r = self.toolbox.call(name, args)
+            review = None
+            if r.get("status") == "awaiting_user_confirmation":
+                payee = self.state.payees.get(args.get("payee", ""))
+                paid_before = (any(payee.name.lower() in t.merchant.lower() or t.merchant.lower() in payee.name.lower()
+                                   for t in self.state.transactions if t.amount < 0) if payee else None)
+                rules = agents.guardian_rules(name, args, message, prev_user, self.state.balances["checking"],
+                                              turn["untrusted"], paid_before)
+                review = agents.combine(rules, verdict)
+                self.evidence.append(review)
+                steps.append({"tool": "guardian_review", "tier": "guard", "args": {"action": name},
+                              "status": "blocked" if review["blocked"] else review["level"] + " risk"})
+                self.audit.append("guardian_review", tool=name, level=review["level"], blocked=review["blocked"],
+                                  reason=review["reason"][:200], source=review["source"])
+                if review["blocked"]:
+                    self.toolbox.confirmations.cancel(r.pop("_token"))      # the approval request never reaches the user
+                    steps.append({"tool": name, "tier": tier, "args": args, "status": "blocked"})
+                    return {"status": "blocked", "tier": "act", "guardian": review,
+                            "error": "The Guardian blocked this action: " + review["reason"]}
+                r["guardian"] = review
             if r.get("status") == "awaiting_user_confirmation":
                 requested[key] = {k: v for k, v in r.items() if k != "_token"}
             token = r.pop("_token", None)
             if token:
-                pending.append({"token": token, "tool": name, "summary": r["summary"]})
-            steps.append({"tool": name, "tier": self.toolbox.tools[name].tier.value if name in self.toolbox.tools else "?",
-                          "args": args, "status": r["status"]})
+                pending.append({"token": token, "tool": name, "summary": r["summary"], "review": review})
+            if "memo withheld" in json.dumps(r, default=str):
+                turn["untrusted"] = True               # injected instructions were seen in data this turn
+            self.evidence.append(r)
+            steps.append({"tool": name, "tier": tier, "args": args, "status": r["status"]})
             return r
 
         used = self.planner.name
@@ -492,12 +546,30 @@ class Agent:
             self.audit.append("planner_error", error=type(e).__name__, detail=str(e)[:120])
             used = self.fallback.name
             reply = self.fallback.respond(message, call)
+
+        # Verifier: every figure in the reply must be grounded in a tool result or the user's own words.
+        self.evidence = self.evidence[-80:]
+        evidence = agents.evidence_from(self.evidence)
+        check = agents.verify(reply, evidence)
+        revised = False
+        if check["unsupported"] and used == self.planner.name and hasattr(self.planner, "revise"):
+            try:
+                reply = yield from self.planner.revise(check["unsupported"])
+                revised = True
+                check = agents.verify(reply, agents.evidence_from(self.evidence))
+            except Exception as e:
+                self.audit.append("planner_error", error=type(e).__name__, detail="during fact-check revision")
+        if check["unsupported"]:
+            reply += "\n\n⚠ Not verified against your data: " + ", ".join(check["unsupported"])
+        verification = {"checked": check["checked"], "unsupported": check["unsupported"], "revised": revised}
+        self.audit.append("verification", checked=check["checked"], unsupported=len(check["unsupported"]),
+                          revised=revised)
         if flags["suspicious"]:
             reply = ("Heads up: your message contains instruction-like text often used in scams or prompt "
                      "injection. My safety rules can't be overridden by a message; limits and approvals still apply.\n\n"
                      + reply)
         self.audit.append("assistant_reply", text=redact(reply)[:500], planner=used)
-        return {"reply": reply, "steps": steps, "pending": pending, "planner": used}
+        return {"reply": reply, "steps": steps, "pending": pending, "planner": used, "verification": verification}
 
     def chat(self, message: str) -> dict:
         gen = self.chat_steps(message)

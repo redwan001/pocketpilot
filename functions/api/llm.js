@@ -54,11 +54,14 @@ export async function onRequestPost({ request, env }) {
   const { messages, tools } = body;
   if (!Array.isArray(messages) || messages.length < 2 || messages.length > MAX_MESSAGES) return json({ error: "bad_messages" }, 400);
   if (messages[0]?.role !== "system" || !String(messages[0].content || "").startsWith("You are PocketPilot")) return json({ error: "forbidden" }, 403);
-  if (!Array.isArray(tools) || tools.some(t => !TOOLS.has(t?.function?.name))) return json({ error: "forbidden_tools" }, 403);
+  // tools are optional (the Guardian reviewer runs without any); when present they must all be PocketPilot's
+  if (tools !== undefined && (!Array.isArray(tools) || tools.some(t => !TOOLS.has(t?.function?.name)))) return json({ error: "forbidden_tools" }, 403);
 
   const key = MODELS[body.model] ? body.model : DEFAULT_MODEL;
   try {
-    const out = await env.AI.run(MODELS[key], { messages, tools, max_tokens: 1500, temperature: 0.2 });
+    const input = { messages, max_tokens: 1500, temperature: 0.2 };
+    if (Array.isArray(tools) && tools.length) input.tools = tools;
+    const out = await env.AI.run(MODELS[key], input);
     return json({ model: key, ...normalize(out) });
   } catch (e) {
     const msg = String(e?.message || e);

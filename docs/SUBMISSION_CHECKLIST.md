@@ -2,7 +2,7 @@
 
 | # | Required item | Where it is | Status | Your action |
 |---|---|---|---|---|
-| — | Registration (form + passport bio pages) | `docs/EMAILS.md` §1 | ⏳ | Fill in the form, attach the passports, send **now** |
+| — | Registration (form + passport bio pages) | sent 15 Oct 2026 | ✅ | Wait for the organiser to confirm the slot |
 | 01 | Technical documentation | `docs/TECHNICAL_DOCUMENTATION.md` | ✅ | Export to PDF |
 | 02 | Presentation deck (≤10 min) | Slides artifact (13 slides with speaker notes) | ✅ | Team details and GitHub link filled in; download PDF/PPTX |
 | 03 | Demo video (≤5 min, optional) | `Desktop\PocketPilot\PocketPilot_demo.mp4` (4:08, 1080p, AI narration + subtitles) | ✅ | Upload unlisted (YouTube/Drive) and put the link in the submission email |

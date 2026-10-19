@@ -35,6 +35,15 @@ AI is unavailable (e.g. the daily free quota is used up), the agent automaticall
 | Affordability | "Can I afford a 15,000 phone?" → yes / tight / no with numbers | ADVISE |
 | Actions | Move to savings, set category limit, cancel subscription, pay biller, transfer to saved payee, dispute charge | **ACT** (needs approval) |
 
+## Multi-agent design
+
+- **Pilo** (planner) talks and calls tools.
+- **Guardian** independently reviews every money action using only the user's own words, never account data. It can
+  block, but never approve.
+- **Verifier** checks every figure in an answer against tool results, forces one correction, and marks anything
+  unsupported.
+- The **policy engine** enforces hard limits in code.
+
 ## Security at a glance
 
 - **Permission tiers.** READ and ADVISE tools run automatically. ACT tools only create a pending request that the user approves in the UI.
@@ -61,7 +70,7 @@ Other entry points:
 ```bash
 python -m pocketpilot.cli --offline           # chat in the terminal
 python scripts/run_demo.py                    # regenerate the execution evidence in evidence/
-python -m unittest discover -s tests -v       # run the 42 tests
+python -m unittest discover -s tests -v       # run the 48 tests
 ```
 
 ### Rebuild and deploy the browser demo (Cloudflare Pages)
@@ -96,12 +105,13 @@ pocketpilot/
   analytics.py   recurring bills, duplicates, anomalies, budget, forecast, insights
   security.py    tiers, policy engine, confirmation tokens, injection guard, PII redaction, audit log
   tools.py       17 tools (6 READ, 5 ADVISE, 6 ACT) with JSON schemas and validation
+  agents.py      Guardian (risk review) and Verifier (fact check) agents
   agent.py       Agent + ClaudePlanner (Anthropic tool use) + RulePlanner (offline)
   api.py         transport-independent JSON API (used by the server and the in-browser build)
   server.py      standard-library web server
   cli.py         terminal chat
 web/index.html   dashboard + chat + approval cards + audit viewer
-tests/           42 unit and integration tests (incl. a scripted fake model)
+tests/           48 unit and integration tests (incl. a scripted fake model)
 functions/api/llm.js  Cloudflare Pages Function: hardened gateway to Workers AI
 scripts/run_demo.py    scripted session -> evidence/
 scripts/make_samples.py  sample statements (PDF + CSV) for trying the upload

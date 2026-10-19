@@ -211,10 +211,17 @@ class TestGoalPlanner(unittest.TestCase):
 
 class FakeModel:
     """Scripted stand-in for the Workers AI endpoint: returns queued replies and records requests."""
-    def __init__(self, replies):
+    GUARDIAN_OK = {"content": '{"matches_request": true, "risk": "low", "reason": "matches the request"}'}
+
+    def __init__(self, replies, guardian=None):
         self.replies, self.requests = list(replies), []
+        self.guardian = list(guardian or [])
+        self.guardian_requests = []
 
     def __call__(self, req):
+        if req["messages"][0]["content"].startswith("You are PocketPilot's Guardian"):
+            self.guardian_requests.append(req)
+            return self.guardian.pop(0) if self.guardian else self.GUARDIAN_OK
         self.requests.append(req)
         return self.replies.pop(0)
 
@@ -251,6 +258,63 @@ class TestOpenModelPlanner(unittest.TestCase):
         self.assertEqual(r["planner"], "offline-rules")
         self.assertIn("Checking", r["reply"])
         self.assertEqual(agent.planner.history, [])              # failed turn rolled back
+
+    def test_verifier_passes_grounded_answer(self):
+        fake = FakeModel([
+            {"content": "", "tool_calls": [{"id": "a", "name": "spending_summary", "arguments": {"month": "2026-09"}}]},
+            {"content": "September: you spent **BDT 105,311**.", "tool_calls": []},
+        ])
+        r = Agent(mode="workers-ai", llm_transport=fake).chat("How much did I spend in September?")
+        self.assertEqual(r["verification"], {"checked": 1, "unsupported": [], "revised": False})
+
+    def test_verifier_makes_model_fix_an_invented_number(self):
+        fake = FakeModel([
+            {"content": "", "tool_calls": [{"id": "a", "name": "spending_summary", "arguments": {"month": "2026-09"}}]},
+            {"content": "September: you spent BDT 123,456.", "tool_calls": []},          # hallucinated
+            {"content": "September: you spent BDT 105,311.", "tool_calls": []},          # corrected
+        ])
+        r = Agent(mode="workers-ai", llm_transport=fake).chat("How much did I spend in September?")
+        self.assertIn("Fact check", fake.requests[-1]["messages"][-1]["content"])
+        self.assertIn("123,456", fake.requests[-1]["messages"][-1]["content"])
+        self.assertEqual(r["reply"], "September: you spent BDT 105,311.")
+        self.assertTrue(r["verification"]["revised"])
+        self.assertEqual(r["verification"]["unsupported"], [])
+
+    def test_verifier_marks_numbers_it_cannot_ground(self):
+        fake = FakeModel([{"content": "You will save BDT 77,777 next year.", "tool_calls": []},
+                          {"content": "You will save BDT 77,777 next year.", "tool_calls": []}])
+        r = Agent(mode="workers-ai", llm_transport=fake).chat("How much will I save?")
+        self.assertIn("Not verified against your data: BDT 77,777", r["reply"])
+
+    def test_guardian_blocks_action_the_user_did_not_ask_for(self):
+        # e.g. the model was manipulated by injected text and tries to move money on a read-only question
+        fake = FakeModel([
+            {"content": "", "tool_calls": [{"id": "a", "name": "transfer_to_payee", "arguments": {"payee": "ammu", "amount": 15000}}]},
+            {"content": "Here are your transactions.", "tool_calls": []},
+        ], guardian=[{"content": '{"matches_request": false, "risk": "high", "reason": "user only asked to view transactions"}'}])
+        agent = Agent(mode="workers-ai", llm_transport=fake)
+        r = agent.chat("show my recent transactions")
+        self.assertEqual(r["pending"], [])
+        self.assertIn("blocked", [s["status"] for s in r["steps"]])
+        self.assertEqual(agent.toolbox.confirmations.pending(), [])                 # no approval token left behind
+        self.assertNotIn("Ammu", str(fake.guardian_requests[0]["messages"]).replace("ammu", ""))  # Guardian sees no account data
+        self.assertIn("guardian_review", [e["event"] for e in agent.audit.entries])
+
+    def test_guardian_approves_requested_action_and_shows_review(self):
+        fake = FakeModel([
+            {"content": "", "tool_calls": [{"id": "a", "name": "move_to_savings", "arguments": {"amount": 5000}}]},
+            {"content": "Please approve the transfer of BDT 5,000.", "tool_calls": []},
+        ])
+        r = Agent(mode="workers-ai", llm_transport=fake).chat("Move 5000 to savings")
+        self.assertEqual(len(r["pending"]), 1)
+        self.assertEqual(r["pending"][0]["review"]["level"], "low")
+        self.assertEqual(r["pending"][0]["review"]["source"], "rules + independent model")
+
+    def test_guardian_works_without_a_model(self):
+        agent = Agent(mode="offline")
+        r = agent.chat("move 5000 to savings")
+        self.assertEqual(r["pending"][0]["review"]["level"], "low")
+        self.assertEqual(r["pending"][0]["review"]["source"], "rules")
 
     def test_language_and_cleanup(self):
         from pocketpilot.agent import OpenModelPlanner as P

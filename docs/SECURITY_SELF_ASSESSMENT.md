@@ -69,6 +69,8 @@ synthetic data.
 | T16 | Model repeats an action or invents results | Two identical transfer requests in one turn; "done!" before approval | Duplicate ACT calls in one turn are merged into one approval; tokens never reach the model; prompt says never claim completion | `test_model_cannot_execute_actions_and_duplicates_are_merged` |
 | T17 | Leakage of an uploaded bank statement | Statement sent to a server, stored, or written to logs | Parsed entirely in the browser (pdf.js / SheetJS / Pyodide); never uploaded or stored; the audit log records counts only (`statement_loaded`); a "keep everything on this device" switch turns the AI off; with AI on, only questions and masked figures the agent looks up reach Workers AI | `test_agent_runs_on_uploaded_statement` (asserts no statement text in the audit log) |
 | T18 | PDF password exposure | Password-protected e-statements | Password typed by the user, passed only to pdf.js in memory, never stored, logged or transmitted | code review (`web/index.html: pdfItems`) |
+| T19 | The model is manipulated into requesting an action the user never asked for | Injected text makes the planner call a transfer on a read-only question | **Guardian agent**: an independent review that sees only the user's words, never account data; it blocks unrequested actions and cancels the approval token before it reaches the user | `test_guardian_blocks_action_the_user_did_not_ask_for` |
+| T20 | Hallucinated figures mislead the user | Answer states an amount that isn't in the data | **Verifier agent**: every figure must be grounded in tool results; one forced self-correction; remaining figures marked "Not verified" | `test_verifier_makes_model_fix_an_invented_number`, `test_verifier_marks_numbers_it_cannot_ground` |
 | T14 | Unsuitable financial advice | Asking which stock or coin to buy | System prompt restricts to budgeting and points to a licensed adviser; no investment tools exist | design |
 
 ## 4. Known-risk list (residual risks)
@@ -100,6 +102,6 @@ synthetic data.
 ## 6. Test results
 
 ```
-python -m unittest discover -s tests -v   ->   Ran 42 tests ... OK
+python -m unittest discover -s tests -v   ->   Ran 48 tests ... OK
 python scripts/run_demo.py                ->   4 executed, 3 refused or blocked, 54 audit entries, chain verified = True
 ```
